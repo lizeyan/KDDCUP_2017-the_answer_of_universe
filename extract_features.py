@@ -90,58 +90,59 @@ def extract_travel_time_naive(path_to_file, output_file, volume_data):
     note that average travel time is timed by 100
     """
     # Step 1: Load trajectories
-    fr = open(path_to_file, 'r')
-    fr.readline()  # skip the header
-    traj_data = fr.readlines()
-    fr.close()
+    if not os.path.exists(output_file):
+        fr = open(path_to_file, 'r')
+        fr.readline()  # skip the header
+        traj_data = fr.readlines()
+        fr.close()
 
-    # Step 2: Create a dictionary to store travel time for each route per time window
-    travel_times = {}
-    for line in traj_data:
-        each_traj = line.replace('"', '').split(',')
-        intersection_id = each_traj[0]
-        tollgate_id = each_traj[1]
+        # Step 2: Create a dictionary to store travel time for each route per time window
+        travel_times = {}
+        for line in traj_data:
+            each_traj = line.replace('"', '').split(',')
+            intersection_id = each_traj[0]
+            tollgate_id = each_traj[1]
 
-        route_id = intersection_id + '-' + tollgate_id
-        if route_id not in travel_times.keys():
-            travel_times[route_id] = {}
+            route_id = intersection_id + '-' + tollgate_id
+            if route_id not in travel_times.keys():
+                travel_times[route_id] = {}
 
-        trace_start_time = each_traj[3]
-        trace_start_time = datetime.strptime(trace_start_time, "%Y-%m-%d %H:%M:%S")
-        time_window_minute = np.math.floor(trace_start_time.minute / 20) * 20
-        start_time_window = datetime(trace_start_time.year, trace_start_time.month, trace_start_time.day,
-                                     trace_start_time.hour, time_window_minute, 0)
-        start_time_window = start_time_window.timestamp()
-        tt = float(each_traj[-1])  # travel time
+            trace_start_time = each_traj[3]
+            trace_start_time = datetime.strptime(trace_start_time, "%Y-%m-%d %H:%M:%S")
+            time_window_minute = np.math.floor(trace_start_time.minute / 20) * 20
+            start_time_window = datetime(trace_start_time.year, trace_start_time.month, trace_start_time.day,
+                                         trace_start_time.hour, time_window_minute, 0)
+            start_time_window = start_time_window.timestamp()
+            tt = float(each_traj[-1])  # travel time
 
-        if start_time_window not in travel_times[route_id].keys():
-            travel_times[route_id][start_time_window] = [tt]
-        else:
-            travel_times[route_id][start_time_window].append(tt)
+            if start_time_window not in travel_times[route_id].keys():
+                travel_times[route_id][start_time_window] = [tt]
+            else:
+                travel_times[route_id][start_time_window].append(tt)
 
-    # Step 3: Calculate average travel time for each route per time window
-    with open(output_file, "w") as f:
-        volume_time_windows = volume_data[:, -1]
-        for route, each_route in travel_times.items():
-            route_time_windows = sorted(list(each_route.keys()))
-            for time_window_start in route_time_windows:
-                last_time_window = last_timewindow(time_window_start, 20 * 60)
-                if last_time_window not in route_time_windows:
-                    continue
-                volume_idx = np.searchsorted(volume_time_windows, last_time_window)
-                if volume_idx >= np.size(volume_time_windows) or volume_time_windows[volume_idx] != last_time_window:
-                    continue
-                volume, ps, sps, wd, ws, tp, rh, pp = volume_data[volume_idx, 3:11]
-                tt_set = np.asarray(each_route[time_window_start]).astype(float)
-                avg_tt = int(np.mean(tt_set) * 100)
-                tt_set_last = np.asarray(each_route[last_time_window]).astype(float)
-                avg_tt_last = int(np.mean(tt_set_last) * 100)
-                intersection_id, tollgate_id = route.split('-')
-                intersection_id = ord(intersection_id)
-                print("%s %s %d %d %d %d %d %d %d %d %d %d %d" % (
-                    tollgate_id, intersection_id, avg_tt_last, avg_tt, volume, ps, sps, wd, ws, tp, rh, pp,
-                    time_window_start), file=f)
-        log("save travel time data to %s" % output_file)
+        # Step 3: Calculate average travel time for each route per time window
+        with open(output_file, "w") as f:
+            volume_time_windows = volume_data[:, -1]
+            for route, each_route in travel_times.items():
+                route_time_windows = sorted(list(each_route.keys()))
+                for time_window_start in route_time_windows:
+                    last_time_window = last_timewindow(time_window_start, 20 * 60)
+                    if last_time_window not in route_time_windows:
+                        continue
+                    volume_idx = np.searchsorted(volume_time_windows, last_time_window)
+                    if volume_idx >= np.size(volume_time_windows) or volume_time_windows[volume_idx] != last_time_window:
+                        continue
+                    volume, ps, sps, wd, ws, tp, rh, pp = volume_data[volume_idx, 3:11]
+                    tt_set = np.asarray(each_route[time_window_start]).astype(float)
+                    avg_tt = int(np.mean(tt_set) * 100)
+                    tt_set_last = np.asarray(each_route[last_time_window]).astype(float)
+                    avg_tt_last = int(np.mean(tt_set_last) * 100)
+                    intersection_id, tollgate_id = route.split('-')
+                    intersection_id = ord(intersection_id)
+                    print("%s %s %d %d %d %d %d %d %d %d %d %d %d" % (
+                        tollgate_id, intersection_id, avg_tt_last, avg_tt, volume, ps, sps, wd, ws, tp, rh, pp,
+                        time_window_start), file=f)
+            log("save travel time data to %s" % output_file)
     log("load travel time data from %s" % output_file)
     return np.loadtxt(output_file)
 
