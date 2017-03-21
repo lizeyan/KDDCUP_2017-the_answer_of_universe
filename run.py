@@ -1,7 +1,7 @@
 # the naive model
 # Do keep everything local as possible as you can.
 from typing import Tuple
-from sklearn import preprocessing, tree
+from sklearn import preprocessing, tree, model_selection, ensemble, linear_model
 from extract_features import *
 import argparse
 
@@ -16,6 +16,7 @@ def main():
         tt = np.loadtxt(FLAGS.travel_time_feature)
     log("volume shape:", np.shape(v))
     log("travel time shape:", np.shape(tt))
+
     v_feature_train, v_label_train, v_feature_test, v_label_test = fold_data(v[:, :-1], v[:, -1], FLAGS.fold)
     t_feature_train, t_label_train, t_feature_test, t_label_test = fold_data(tt[:, :-1], tt[:, -1], FLAGS.fold)
 
@@ -27,15 +28,16 @@ def main():
     t_label_train = np.searchsorted(travel_time_percentiles, t_label_train)
     t_label_test = np.searchsorted(travel_time_percentiles, t_label_test)
 
-    volume_clf = tree.DecisionTreeClassifier()
-    volume_clf.fit(v_feature_train, v_label_train)
-    v_accuracy = accuracy(volume_clf.predict(v_feature_test), v_label_test)
-    log("volume accuracy: %f" % v_accuracy)
+    def use_a_model(model, name, f_train, l_train, f_test, l_test):
+        model.fit(f_train, l_train)
+        _acc = accuracy(model.predict(f_test), l_test)
+        log("%s accuracy with %s: %f" % (name, type(model).__name__, _acc))
 
-    travel_time_clf = tree.DecisionTreeClassifier()
-    travel_time_clf.fit(t_feature_train, t_label_train)
-    t_accuracy = accuracy(travel_time_clf.predict(t_feature_test), t_label_test)
-    log("travel time accuracy: %f" % t_accuracy)
+    model_v = lambda model: use_a_model(model, "volume", v_feature_train, v_label_train, v_feature_test, v_label_test)
+    model_t = lambda model: use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
+
+    model_v(tree.DecisionTreeClassifier())
+    model_t(tree.DecisionTreeClassifier())
 
 
 def prepare_data(method, clean=False) -> Tuple[np.ndarray, np.ndarray]:
