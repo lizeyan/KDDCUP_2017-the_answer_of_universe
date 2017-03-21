@@ -33,8 +33,9 @@ def main():
         _acc = accuracy(model.predict(f_test), l_test)
         log("%s accuracy with %s: %f" % (name, type(model).__name__, _acc))
 
-    model_v = lambda model: use_a_model(model, "volume", v_feature_train, v_label_train, v_feature_test, v_label_test)
-    model_t = lambda model: use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
+    def model_v(model): use_a_model(model, "volume", v_feature_train, v_label_train, v_feature_test, v_label_test)
+
+    def model_t(model): use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
 
     model_v(tree.DecisionTreeClassifier())
     model_t(tree.DecisionTreeClassifier())
