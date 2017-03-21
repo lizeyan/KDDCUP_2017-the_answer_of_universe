@@ -1,6 +1,7 @@
 # Extract features and labels from raw data and save them into files with ndarray format if it's needed
 # In other words, print each number (all are in same type, integer or float) row by row and separate them by spaces
 # Please note the meaning of the output ndarray here
+from datetime import datetime
 import numpy as np
 from utility import *
 import os
@@ -82,11 +83,19 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
 def extract_travel_time_naive(path_to_file, output_file, volume_data):
     """
     each column of the output ndarray is:
-        tollgate id,
-        intersection id,
-        average travel time in last timewindow * 100,
-        average travel time * 100,
-        the start time of timewindow with unix timestamp format (the length of timewindow is fixed to 20 minutes)
+        0   tollgate id,
+        1   intersection id,
+        2   average travel time in last timewindow * 100,
+        3   average travel time * 100,
+        4   average volume in last timewindow,
+        5   pressure * 100
+        6   sea_pressure * 100
+        7   wind_direction * 100
+        8   wind_speed * 100
+        9   temperature * 100
+        10  rel_humidity * 100
+        11  precipitation * 100
+        12  the start time of timewindow with unix timestamp format (the length of timewindow is fixed to 20 minutes)
     note that average travel time is timed by 100
     """
     # Step 1: Load trajectories
