@@ -2,3 +2,6 @@ testing_phase1/
 training/
 *.data
 *.npy
+*.pdf
+.idea/
+__pycache__/

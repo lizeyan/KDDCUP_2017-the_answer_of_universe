@@ -1,12 +1,23 @@
 # the naive model
 # Do keep everything local as possible as you can.
 from typing import Tuple
-from sklearn import preprocessing, tree, model_selection, ensemble, linear_model
+
+from pandas import DataFrame
+from sklearn import preprocessing, tree, model_selection, ensemble, linear_model, svm, neural_network
 from extract_features import *
+import pydotplus
 import argparse
+import seaborn as sns
+from matplotlib import pyplot as plt
 
 
 def main():
+    if FLAGS.clean:
+        remove_is_exist(FLAGS.weather_raw_data)
+        remove_is_exist(FLAGS.volume_raw_data)
+        remove_is_exist(FLAGS.travel_time_raw_data)
+        remove_is_exist(FLAGS.volume_feature)
+        remove_is_exist(FLAGS.travel_time_feature)
     if not os.path.exists(FLAGS.volume_feature) or not os.path.exists(FLAGS.travel_time_feature):
         v, tt = prepare_data("naive")
         np.savetxt(FLAGS.volume_feature, v)
@@ -14,9 +25,23 @@ def main():
     else:
         v = np.loadtxt(FLAGS.volume_feature)
         tt = np.loadtxt(FLAGS.travel_time_feature)
+    log("data preparation finished")
     log("volume shape:", np.shape(v))
     log("travel time shape:", np.shape(tt))
 
+    test_some_models(v, tt)
+    # analyse_features_by_plotting(v, tt)
+
+
+def analyse_features_by_plotting(v, tt):
+    v_frame = DataFrame(v, columns=["tollgate id", "direction", "last volume", "pressure", "sea pressure", "wind direction", "wind speed", "temperature", "rel_humidity", "precipitation", "daily time", "volume"])
+    volume = v[:, -1]
+    daily_time = v[:, 10]
+    plot_x_y(daily_time, volume)
+    plt.show()
+
+
+def test_some_models(v, tt):
     v_feature_train, v_label_train, v_feature_test, v_label_test = fold_data(v[:, :-1], v[:, -1], FLAGS.fold)
     t_feature_train, t_label_train, t_feature_test, t_label_test = fold_data(tt[:, :-1], tt[:, -1], FLAGS.fold)
 
@@ -32,21 +57,30 @@ def main():
         model.fit(f_train, l_train)
         _acc = accuracy(model.predict(f_test), l_test)
         log("%s accuracy with %s: %f" % (name, type(model).__name__, _acc))
+        return model
 
-    def model_v(model): use_a_model(model, "volume", v_feature_train, v_label_train, v_feature_test, v_label_test)
+    def model_v(model): return use_a_model(model, "volume", v_feature_train, v_label_train, v_feature_test, v_label_test)
 
-    def model_t(model): use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
+    def model_t(model): return use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
 
-    model_v(tree.DecisionTreeClassifier())
-    model_t(tree.DecisionTreeClassifier())
+    # model_v(tree.DecisionTreeClassifier())
+    # model_t(tree.DecisionTreeClassifier())
+    # # require graphviz installed. use `sudo apt install graphviz` on Ubuntu or comment codes below
+    # # dot_data = tree.export_graphviz(t_dt, out_file=None, max_depth=4)
+    # # graph = pydotplus.graph_from_dot_data(dot_data)
+    # # graph.write_pdf("travel_time_decision_tree.pdf")
+    #
+    # model_v(ensemble.RandomForestClassifier(n_estimators=1000))
+    # model_t(ensemble.RandomForestClassifier(n_estimators=1000))
+    #
+    # model_v(svm.SVC())
+    # model_t(svm.SVC())
+
+    model_v(neural_network.MLPClassifier(max_iter=100000))
+    model_t(neural_network.MLPClassifier(max_iter=100000))
 
 
-def prepare_data(method, clean=False) -> Tuple[np.ndarray, np.ndarray]:
-    if clean:
-        os.remove(FLAGS.weather_raw_data)
-        os.remove(FLAGS.volume_raw_data)
-        os.remove(FLAGS.travel_time_raw_data)
-
+def prepare_data(method) -> Tuple[np.ndarray, np.ndarray]:
     weather_data, volume_data, travel_time_data = None, None, None
     if method is "naive":
         # Note that the sort is required
@@ -83,6 +117,9 @@ parser.add_argument("--weather_input", default="./training/weather (table 7)_tra
 
 parser.add_argument("--method", default="naive", choices=["naive"], type=str)
 parser.add_argument("--fold", default=10, type=int)
+
+parser.add_argument("--clean", action="store_true")
+
 FLAGS = parser.parse_args()
 if __name__ == "__main__":
     main()

@@ -66,8 +66,10 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
                         if last_time_window not in each_tollgate_direction:
                             continue
                         weather_idx = np.searchsorted(weather_times, last_time_window)
+                        if weather_idx >= np.size(weather_times):
+                            continue
                         weather_time = weather_times[weather_idx]
-                        if weather_idx >= np.size(weather_times) or weather_time - last_time_window > 3 * 60 * 60:
+                        if weather_time - last_time_window > 3 * 60 * 60:
                             # if the time gap is larger than 3 hours
                             continue
                         ps, sps, wd, ws, tp, rh, pp = weather_data[weather_idx, 1:]
@@ -131,15 +133,15 @@ def extract_travel_time_naive(path_to_file, output_file, volume_data):
 
         # Step 3: Calculate average travel time for each route per time window
         with open(output_file, "w") as f:
-            volume_time_windows = volume_data[:, -1]
+            v_time_windows = volume_data[:, -1]
             for route, each_route in travel_times.items():
                 route_time_windows = sorted(list(each_route.keys()))
                 for time_window_start in route_time_windows:
                     last_time_window = last_timewindow(time_window_start, 20 * 60)
                     if last_time_window not in route_time_windows:
                         continue
-                    volume_idx = np.searchsorted(volume_time_windows, last_time_window)
-                    if volume_idx >= np.size(volume_time_windows) or volume_time_windows[volume_idx] != last_time_window:
+                    volume_idx = np.searchsorted(v_time_windows, last_time_window)
+                    if volume_idx >= np.size(v_time_windows) or v_time_windows[volume_idx] != last_time_window:
                         continue
                     volume, ps, sps, wd, ws, tp, rh, pp = volume_data[volume_idx, 3:11]
                     tt_set = np.asarray(each_route[time_window_start]).astype(float)
