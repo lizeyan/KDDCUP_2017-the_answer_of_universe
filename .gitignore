@@ -4,4 +4,5 @@ training/
 *.npy
 *.pdf
 .idea/
+*.csv
 __pycache__/

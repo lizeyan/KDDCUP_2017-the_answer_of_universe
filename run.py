@@ -20,14 +20,14 @@ def main():
         remove_is_exist(FLAGS.travel_time_feature)
     if not os.path.exists(FLAGS.volume_feature) or not os.path.exists(FLAGS.travel_time_feature):
         v, tt = prepare_data("naive")
-        np.savetxt(FLAGS.volume_feature, v)
-        np.savetxt(FLAGS.travel_time_feature, tt)
+        v.to_csv(FLAGS.volume_feature, index=False)
+        tt.to_csv(FLAGS.travel_time_feature, index=False)
     else:
-        v = np.loadtxt(FLAGS.volume_feature)
-        tt = np.loadtxt(FLAGS.travel_time_feature)
+        v = DataFrame.from_csv(FLAGS.volume_feature, index_col=None)
+        tt = DataFrame.from_csv(FLAGS.travel_time_feature, index_col=None)
     log("data preparation finished")
-    log("volume shape:", np.shape(v))
-    log("travel time shape:", np.shape(tt))
+    log("volume shape:", v.shape)
+    log("travel time shape:", tt.shape)
 
     test_some_models(v, tt)
     # analyse_features_by_plotting(v, tt)
@@ -42,8 +42,11 @@ def analyse_features_by_plotting(v, tt):
 
 
 def test_some_models(v, tt):
-    v_feature_train, v_label_train, v_feature_test, v_label_test = fold_data(v[:, :-1], v[:, -1], FLAGS.fold)
-    t_feature_train, t_label_train, t_feature_test, t_label_test = fold_data(tt[:, :-1], tt[:, -1], FLAGS.fold)
+    _v_tmp = fold_data(np.asarray(v[["tid", "lav", "time", "day"]]), np.asarray(v["cav"]), FLAGS.fold)
+    _tt_tmp = fold_data(np.asarray(tt[["tid", "iid", "lav", "lat", "time", "day"]]), np.asarray(tt["cat"]), FLAGS.fold)
+
+    v_feature_train, v_label_train, v_feature_test, v_label_test = _v_tmp
+    t_feature_train, t_label_train, t_feature_test, t_label_test = _tt_tmp
 
     volume_percentiles = np.asarray([np.percentile(v_label_train, i * 10) for i in range(10)])
     v_label_train = np.searchsorted(volume_percentiles, v_label_train)
@@ -63,49 +66,59 @@ def test_some_models(v, tt):
 
     def model_t(model): return use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
 
-    # model_v(tree.DecisionTreeClassifier())
-    # model_t(tree.DecisionTreeClassifier())
-    # # require graphviz installed. use `sudo apt install graphviz` on Ubuntu or comment codes below
-    # # dot_data = tree.export_graphviz(t_dt, out_file=None, max_depth=4)
-    # # graph = pydotplus.graph_from_dot_data(dot_data)
-    # # graph.write_pdf("travel_time_decision_tree.pdf")
-    #
-    # model_v(ensemble.RandomForestClassifier(n_estimators=1000))
-    # model_t(ensemble.RandomForestClassifier(n_estimators=1000))
-    #
-    # model_v(svm.SVC())
-    # model_t(svm.SVC())
+    v_dt = model_v(tree.DecisionTreeClassifier())
+    t_dt = model_t(tree.DecisionTreeClassifier())
+    # require graphviz installed. use `sudo apt install graphviz` on Ubuntu or comment codes below
+    dot_data = tree.export_graphviz(v_dt, out_file=None, max_depth=4, feature_names=["tid", "lav", "time", "day"])
+    graph = pydotplus.graph_from_dot_data(dot_data)
+    graph.write_pdf("travel_time_decision_tree.pdf")
 
-    model_v(neural_network.MLPClassifier(max_iter=100000))
-    model_t(neural_network.MLPClassifier(max_iter=100000))
+    model_v(ensemble.RandomForestClassifier(n_estimators=1000))
+    model_t(ensemble.RandomForestClassifier(n_estimators=1000))
+
+    model_v(svm.SVC())
+    model_t(svm.SVC())
+
+    model_v(neural_network.MLPClassifier(max_iter=1000000))
+    model_t(neural_network.MLPClassifier(max_iter=1000000))
 
 
-def prepare_data(method) -> Tuple[np.ndarray, np.ndarray]:
-    weather_data, volume_data, travel_time_data = None, None, None
+def prepare_data(method) -> Tuple[DataFrame, DataFrame]:
     if method is "naive":
-        # Note that the sort is required
-        # Note that the index of features is hard coded, be careful
-        weather_data = extract_weather(FLAGS.weather_input, FLAGS.weather_raw_data)
-        weather_data = weather_data[weather_data[:, 0].argsort()]
-        volume_data = extract_volume_naive(FLAGS.volume_input, FLAGS.volume_raw_data, weather_data)
-        volume_data = volume_data[volume_data[:, -1].argsort()]
-        travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.travel_time_raw_data, volume_data)
+        return prepare_data_naive()
+
+
+def prepare_data_naive():
+    # Note that the sort is required
+    # Note that the index of features is hard coded, be careful
+    weather_data = extract_weather(FLAGS.weather_input, FLAGS.weather_raw_data)
+    weather_data = weather_data[weather_data[:, 0].argsort()]
+    volume_data = extract_volume_naive(FLAGS.volume_input, FLAGS.volume_raw_data, weather_data)
+    volume_data = volume_data[volume_data[:, -1].argsort()]
+    travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.travel_time_raw_data, volume_data)
     # get really useful features from somewhat raw data
-    volume = volume_data[:, [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 3]]
-    travel_time = travel_time_data[:, [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 3]]
+    volume = volume_data[:, [0, 1, 2, 3, 11, 11]]
+    travel_time = travel_time_data[:, [0, 1, 2, 3, 4, 12, 12]]
     # convert timestamp to time in a day
     volume[:, -2] = timestamp2daily(volume[:, -2])
     travel_time[:, -2] = timestamp2daily(travel_time[:, -2])
+    volume[:, -1] = timestamp2day(volume[:, -1])
+    travel_time[:, -1] = timestamp2day(travel_time[:, -1])
     # normalize data
-    volume = preprocessing.normalize(volume, axis=0, norm="l2")
-    travel_time = preprocessing.normalize(travel_time, axis=0, norm="l2")
+    volume = np.concatenate([volume[:, :2], zero_normalization(volume[:, 2:-1]), volume[:, -1:]], 1)
+    travel_time = np.concatenate([travel_time[:, :2], zero_normalization(travel_time[:, 2:-1]), travel_time[:, -1:]], 1)
+    # convert to DataFrame
+    volume = DataFrame(data=volume, columns=["tid", "dir", "lav", "cav", "time", "day"])
+    travel_time = DataFrame(data=travel_time, columns=["tid", "iid", "lat", "cat", "lav", "time", "day"])
+    print(volume)
+    print(travel_time)
     return volume, travel_time
 
 
 parser = argparse.ArgumentParser(description="KDD CUP 2017. The answer of universe")
 
-parser.add_argument("--volume_feature", default="volume_preprocessed.data", type=str)
-parser.add_argument("--travel_time_feature", default="travel_time_preprocessed.data", type=str)
+parser.add_argument("--volume_feature", default="volume_preprocessed.csv", type=str)
+parser.add_argument("--travel_time_feature", default="travel_time_preprocessed.csv", type=str)
 
 parser.add_argument("--volume_raw_data", default="volume.data", type=str)
 parser.add_argument("--travel_time_raw_data", default="travel_time.data", type=str)

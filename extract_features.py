@@ -3,6 +3,7 @@
 # Please note the meaning of the output ndarray here
 from datetime import datetime
 import numpy as np
+from pandas import DataFrame
 from utility import *
 import os
 

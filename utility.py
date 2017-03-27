@@ -16,7 +16,11 @@ def last_timewindow(timestamp, timewindow=20*60) -> int:
 
 
 def timestamp2daily(timestamp):
-    return np.remainder(timestamp, 86400)
+    return np.remainder(np.add(timestamp, 3600 * 8), 86400)
+
+
+def timestamp2day(timestamp):
+    return np.remainder((np.divide(np.remainder(np.add(timestamp, 3600 * 8), 86400 * 7), 86400) + 4), 7).astype(int)
 
 
 def fold_data(features, label, fold):
@@ -54,3 +58,10 @@ def remove_is_exist(path):
         os.remove(path)
     except FileNotFoundError:
         pass
+
+
+def zero_normalization(array):
+    """
+    normalize each column of array to zero mean and unit variance
+    """
+    return (array - np.mean(array, axis=0)) / np.std(array, axis=0)
