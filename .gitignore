@@ -5,4 +5,5 @@ training/
 *.pdf
 .idea/
 *.csv
+pic/
 __pycache__/

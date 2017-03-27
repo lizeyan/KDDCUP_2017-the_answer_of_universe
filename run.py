@@ -29,16 +29,35 @@ def main():
     log("volume shape:", v.shape)
     log("travel time shape:", tt.shape)
 
-    test_some_models(v, tt)
-    # analyse_features_by_plotting(v, tt)
+    # test_some_models(v, tt)
+    analyse_features_by_plotting(v, tt)
 
 
 def analyse_features_by_plotting(v, tt):
-    v_frame = DataFrame(v, columns=["tollgate id", "direction", "last volume", "pressure", "sea pressure", "wind direction", "wind speed", "temperature", "rel_humidity", "precipitation", "daily time", "volume"])
-    volume = v[:, -1]
-    daily_time = v[:, 10]
-    plot_x_y(daily_time, volume)
-    plt.show()
+    clean_dir("./pic")
+    sns.boxplot(x="lav", y="cav", data=v)
+    sns.plt.savefig("./pic/last_volume_to_volume.jpg")
+    sns.boxplot(x="time", y="cav", data=v)
+    sns.plt.savefig("./pic/time_to_volume.jpg")
+    sns.boxplot(x="day", y="cav", data=v)
+    sns.plt.savefig("./pic/day_to_volume.jpg")
+    sns.boxplot(x="tid", y="cav", data=v)
+    sns.plt.savefig("./pic/tid_to_volume.jpg")
+    sns.boxplot(x="dir", y="cav", data=v)
+    sns.plt.savefig("./pic/dir_to_volume.jpg")
+    ###
+    sns.jointplot(x="lav", y="cat", data=tt)
+    sns.plt.savefig("./pic/last_volume_to_average_travel_time.jpg")
+    sns.boxplot(x="time", y="cat", data=tt)
+    sns.plt.savefig("./pic/time_to_average_travel_time.jpg")
+    sns.boxplot(x="day", y="cat", data=tt)
+    sns.plt.savefig("./pic/day_to_average_travel_time.jpg")
+    sns.jointplot(x="lat", y="cat", data=tt)
+    sns.plt.savefig("./pic/last_travel_time_to_average_travel_time.jpg")
+    sns.boxplot(x="tid", y="cat", data=tt)
+    sns.plt.savefig("./pic/tid_to_average_travel_time.jpg")
+    sns.boxplot(x="iid", y="cat", data=tt)
+    sns.plt.savefig("./pic/iid_to_average_travel_time.jpg")
 
 
 def test_some_models(v, tt):

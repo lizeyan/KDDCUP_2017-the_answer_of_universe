@@ -1,4 +1,6 @@
 # Some utility functions
+import shutil
+
 from matplotlib import pyplot as plt
 import numpy as np
 import os
@@ -65,3 +67,9 @@ def zero_normalization(array):
     normalize each column of array to zero mean and unit variance
     """
     return (array - np.mean(array, axis=0)) / np.std(array, axis=0)
+
+
+def clean_dir(path):
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
