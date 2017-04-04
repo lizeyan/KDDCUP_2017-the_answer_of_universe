@@ -14,7 +14,7 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
         0   tollgate id,
         1   direction,
         2   average volume in last timewindow,
-        3   average volume,
+        3   average volume (in this timewindow)
         4   pressure * 100
         5   sea_pressure * 100
         6   wind_direction * 100
@@ -23,6 +23,7 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
         9   rel_humidity * 100
         10   precipitation * 100
         11  the start time of timewindow with unix timestamp format (the length of timewindow is fixed to 20 minutes)
+        12  average volume in last one hour
     """
     if not os.path.exists(output_file):
         # Step 1: Load volume data
@@ -74,9 +75,19 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
                             # if the time gap is larger than 3 hours
                             continue
                         ps, sps, wd, ws, tp, rh, pp = weather_data[weather_idx, 1:]
-                        print("%s %s %d %d %d %d %d %d %d %d %d %d" % (
+
+                        ll_time_window = last_timewindow(last_time_window, 20 * 60)
+                        lll_time_window = last_timewindow(ll_time_window, 20 * 60)
+                        last_one_hour_volume = int(0.6*float(each_tollgate_direction[last_time_window]))
+                        if ll_time_window in each_tollgate_direction:
+                            last_one_hour_volume += int(0.3*float(each_tollgate_direction[ll_time_window]))
+                        if lll_time_window in each_tollgate_direction:
+                            last_one_hour_volume += int(0.1*float(each_tollgate_direction[lll_time_window]))
+
+                        print("%s %s %d %d %d %d %d %d %d %d %d %d %d" % (
                             tollgate_id, direction, each_tollgate_direction[last_time_window],
-                            each_tollgate_direction[time_window], ps, sps, wd, ws, tp, rh, pp, time_window),
+                            each_tollgate_direction[time_window], ps, sps, wd, ws, tp, rh, pp, time_window,
+                            last_one_hour_volume),
                               file=f)
         log("save volume data to %s" % output_file)
     log("load volume data from %s" % output_file)
@@ -134,7 +145,7 @@ def extract_travel_time_naive(path_to_file, output_file, volume_data):
 
         # Step 3: Calculate average travel time for each route per time window
         with open(output_file, "w") as f:
-            v_time_windows = volume_data[:, -1]
+            v_time_windows = volume_data[:, -2]
             for route, each_route in travel_times.items():
                 route_time_windows = sorted(list(each_route.keys()))
                 for time_window_start in route_time_windows:

@@ -45,19 +45,21 @@ def analyse_features_by_plotting(v, tt):
     sns.plt.savefig("./pic/tid_to_volume.png")
     sns.boxplot(x="dir", y="cav", data=v)
     sns.plt.savefig("./pic/dir_to_volume.png")
+    sns.boxplot(x="l1hv", y="cav", data=v)
+    sns.plt.savefig("./pic/l1hv_to_volume.png")
     ###
-    sns.jointplot(x="lav", y="cat", data=tt)
-    sns.plt.savefig("./pic/last_volume_to_average_travel_time.png")
-    sns.boxplot(x="time", y="cat", data=tt)
-    sns.plt.savefig("./pic/time_to_average_travel_time.png")
-    sns.boxplot(x="day", y="cat", data=tt)
-    sns.plt.savefig("./pic/day_to_average_travel_time.png")
-    sns.jointplot(x="lat", y="cat", data=tt)
-    sns.plt.savefig("./pic/last_travel_time_to_average_travel_time.png")
-    sns.boxplot(x="tid", y="cat", data=tt)
-    sns.plt.savefig("./pic/tid_to_average_travel_time.png")
-    sns.boxplot(x="iid", y="cat", data=tt)
-    sns.plt.savefig("./pic/iid_to_average_travel_time.png")
+    # sns.jointplot(x="lav", y="cat", data=tt)
+    # sns.plt.savefig("./pic/last_volume_to_average_travel_time.png")
+    # sns.boxplot(x="time", y="cat", data=tt)
+    # sns.plt.savefig("./pic/time_to_average_travel_time.png")
+    # sns.boxplot(x="day", y="cat", data=tt)
+    # sns.plt.savefig("./pic/day_to_average_travel_time.png")
+    # sns.jointplot(x="lat", y="cat", data=tt)
+    # sns.plt.savefig("./pic/last_travel_time_to_average_travel_time.png")
+    # sns.boxplot(x="tid", y="cat", data=tt)
+    # sns.plt.savefig("./pic/tid_to_average_travel_time.png")
+    # sns.boxplot(x="iid", y="cat", data=tt)
+    # sns.plt.savefig("./pic/iid_to_average_travel_time.png")
 
 
 def test_some_models(v, tt):
@@ -116,7 +118,7 @@ def prepare_data_naive():
     volume_data = volume_data[volume_data[:, -1].argsort()]
     travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.travel_time_raw_data, volume_data)
     # get really useful features from somewhat raw data
-    volume = volume_data[:, [0, 1, 2, 3, 11, 11]]
+    volume = volume_data[:, [0, 1, 2, 3, 12, 11, 11]]
     travel_time = travel_time_data[:, [0, 1, 2, 3, 4, 12, 12]]
     # convert timestamp to time in a day
     volume[:, -2] = timestamp2daily(volume[:, -2])
@@ -127,7 +129,7 @@ def prepare_data_naive():
     volume = np.concatenate([volume[:, :2], zero_normalization(volume[:, 2:-1]), volume[:, -1:]], 1)
     travel_time = np.concatenate([travel_time[:, :2], zero_normalization(travel_time[:, 2:-1]), travel_time[:, -1:]], 1)
     # convert to DataFrame
-    volume = DataFrame(data=volume, columns=["tid", "dir", "lav", "cav", "time", "day"])
+    volume = DataFrame(data=volume, columns=["tid", "dir", "lav", "cav", "l1hv", "time", "day"])
     travel_time = DataFrame(data=travel_time, columns=["tid", "iid", "lat", "cat", "lav", "time", "day"])
     #print(volume)
     #print(travel_time)
