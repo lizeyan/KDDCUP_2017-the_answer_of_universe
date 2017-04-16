@@ -21,8 +21,12 @@ def timestamp2daily(timestamp):
     return np.remainder(np.add(timestamp, 3600 * 8), 86400)
 
 
-def timestamp2day(timestamp):
+def timestamp2day_of_week(timestamp):
     return np.remainder((np.divide(np.remainder(np.add(timestamp, 3600 * 8), 86400 * 7), 86400) + 4), 7).astype(int)
+
+
+def timestamp2day(timestamp):
+    return np.divide(timestamp + 3600 * 8, 86400).astype(int)
 
 
 def fold_data(features, label, fold):

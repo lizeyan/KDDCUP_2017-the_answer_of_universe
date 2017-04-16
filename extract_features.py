@@ -6,6 +6,7 @@ import numpy as np
 from pandas import DataFrame
 from utility import *
 import os
+import pickle
 
 
 def extract_volume_naive(path_to_file, output_file, weather_data):
@@ -192,3 +193,75 @@ def extract_weather(path_to_file, output_file) -> np.ndarray:
         log("save weather data to %s" % output_file)
     log("load weather data from %s" % output_file)
     return np.loadtxt(output_file)
+
+
+def extract_volume_knn(path_to_file, output_file):
+    """
+    0 axis: tollgate
+    1 axis: direction
+    2 axis: day
+    3 axis: time windows of 20 minute
+    4 axis: features
+        0: average volume. 0 by default
+        1: day of week. 0 by default
+    """
+    AV = 0
+    DOW = 1
+    if os.path.exists(output_file):
+        all_ids = pickle.load(open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "rb"))
+        all_days = pickle.load(open("%s_all_days.pickle" % output_file.rstrip(".npy"), "rb"))
+        return np.load(output_file), all_ids, all_days
+    with open(path_to_file, 'r') as fin:
+        fin.readline()
+        raw_input_lines = fin.readlines()
+    assert raw_input_lines is not None, "Read input file %s failed" % path_to_file
+    raw_data = []
+    for input_line in raw_input_lines:
+        entry_list = input_line.replace('"', '').split(',')
+        tollgate_id = entry_list[1]
+        direction = entry_list[2]
+        vehicle_model = entry_list[3]
+        has_etc = entry_list[4]
+        pass_time = entry_list[0]
+        pass_time = datetime.strptime(pass_time, "%Y-%m-%d %H:%M:%S")
+        pass_minute = int(np.math.floor(pass_time.minute / 20) * 20)
+        start_time_window = datetime(pass_time.year, pass_time.month, pass_time.day,
+                                     pass_time.hour, pass_minute, 0)
+        start_time_window = start_time_window.timestamp()
+        raw_data.append((tollgate_id, direction, timestamp2day(start_time_window), timestamp2daily(start_time_window), vehicle_model, has_etc))
+    raw_data = np.asarray(raw_data, dtype=int)
+    all_ids = np.sort(np.unique(raw_data[:, 0]))
+    tollgate_id_count = np.size(all_ids)
+    direction_count = np.size(np.unique(raw_data[:, 1]))
+    all_days = np.sort(np.unique(raw_data[:, 2]))
+    day_count = np.size(all_days)
+    features_count = 2
+    time_windows_count = int(86400 / 1200)
+    shape = (tollgate_id_count, direction_count, day_count, time_windows_count, features_count)
+    log("shape of raw volume data:", shape)
+    volume_for_knn = np.zeros(shape=shape, dtype=int)
+    invert_day_dict = {}
+    for day in all_days:
+        idx = np.asscalar(np.searchsorted(all_days, day))
+        invert_day_dict[day] = idx
+        volume_for_knn[:, :, idx, :, DOW] = timestamp2day_of_week(day * 86400)
+    invert_id_dict = {}
+    for tollgate_id in all_ids:
+        idx = np.asscalar(np.searchsorted(all_ids, tollgate_id))
+        invert_id_dict[tollgate_id] = idx
+    test = set()
+    for entry in raw_data:
+        day_index = invert_day_dict[entry[2]]
+        time_windows_index = int(entry[3] / 1200)
+        id_index = invert_id_dict[entry[0]]
+        test.add((time_windows_index + 1))
+        volume_for_knn[id_index, entry[1], day_index, time_windows_index, AV] += 1
+    print(len(test))
+    np.save(output_file, volume_for_knn)
+    pickle.dump(all_ids, file=open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "wb+"))
+    pickle.dump(all_days, file=open("%s_all_days.pickle" % output_file.rstrip(".npy"), "wb+"))
+    return volume_for_knn, all_ids, all_days
+
+
+
+

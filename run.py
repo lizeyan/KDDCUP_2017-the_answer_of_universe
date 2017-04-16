@@ -121,8 +121,8 @@ def prepare_data_naive():
     # convert timestamp to time in a day
     volume[:, -2] = timestamp2daily(volume[:, -2])
     travel_time[:, -2] = timestamp2daily(travel_time[:, -2])
-    volume[:, -1] = timestamp2day(volume[:, -1])
-    travel_time[:, -1] = timestamp2day(travel_time[:, -1])
+    volume[:, -1] = timestamp2day_of_week(volume[:, -1])
+    travel_time[:, -1] = timestamp2day_of_week(travel_time[:, -1])
     # normalize data
     volume = np.concatenate([volume[:, :2], zero_normalization(volume[:, 2:-1]), volume[:, -1:]], 1)
     travel_time = np.concatenate([travel_time[:, :2], zero_normalization(travel_time[:, 2:-1]), travel_time[:, -1:]], 1)
