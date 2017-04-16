@@ -6,6 +6,9 @@ import numpy as np
 import os
 
 
+holiday_set = {17059, 17060, 17061, 17075, 17076, 17077, 17078, 17079, 17080, 17081}
+
+
 def log(*args):
     from datetime import datetime
     now = datetime.now()
@@ -71,6 +74,10 @@ def zero_normalization(array):
     normalize each column of array to zero mean and unit variance
     """
     return (array - np.mean(array, axis=0)) / np.std(array, axis=0)
+
+
+def is_holiday(timestamp):
+    return np.vectorize(lambda x: 1 if int((x + 3600 * 8) / 86400) in holiday_set else 0)(timestamp)
 
 
 def clean_dir(path):

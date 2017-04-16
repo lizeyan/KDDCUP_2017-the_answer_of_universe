@@ -204,9 +204,12 @@ def extract_volume_knn(path_to_file, output_file):
     4 axis: features
         0: average volume. 0 by default
         1: day of week. 0 by default
+        2: is holiday. 0 or 1
     """
     AV = 0
     DOW = 1
+    HLD = 2
+    features_count = 3
     if os.path.exists(output_file):
         all_ids = pickle.load(open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "rb"))
         all_days = pickle.load(open("%s_all_days.pickle" % output_file.rstrip(".npy"), "rb"))
@@ -230,12 +233,13 @@ def extract_volume_knn(path_to_file, output_file):
         start_time_window = start_time_window.timestamp()
         raw_data.append((tollgate_id, direction, timestamp2day(start_time_window), timestamp2daily(start_time_window), vehicle_model, has_etc))
     raw_data = np.asarray(raw_data, dtype=int)
+
     all_ids = np.sort(np.unique(raw_data[:, 0]))
     tollgate_id_count = np.size(all_ids)
     direction_count = np.size(np.unique(raw_data[:, 1]))
     all_days = np.sort(np.unique(raw_data[:, 2]))
     day_count = np.size(all_days)
-    features_count = 2
+
     time_windows_count = int(86400 / 1200)
     shape = (tollgate_id_count, direction_count, day_count, time_windows_count, features_count)
     log("shape of raw volume data:", shape)
@@ -244,7 +248,8 @@ def extract_volume_knn(path_to_file, output_file):
     for day in all_days:
         idx = np.asscalar(np.searchsorted(all_days, day))
         invert_day_dict[day] = idx
-        volume_for_knn[:, :, idx, :, DOW] = timestamp2day_of_week(day * 86400)
+        volume_for_knn[:, :, idx, :, DOW] = timestamp2day_of_week(day * 86400 - 3600 * 8)
+        volume_for_knn[:, :, idx, :, HLD] = is_holiday(day * 86400 - 3600 * 8)
     invert_id_dict = {}
     for tollgate_id in all_ids:
         idx = np.asscalar(np.searchsorted(all_ids, tollgate_id))

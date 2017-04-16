@@ -34,7 +34,7 @@ def main():
     v_test, all_ids, all_days = extract_volume_knn("./testing_phase1/volume(table 6)_test1.csv", "volume_for_knn_test.npy")
     log("Train data shape:", np.shape(v_train))
     log("Test data shape:", np.shape(v_test))
-    num_bins = 26
+    num_bins = 21
     AVERAGE_VOLUME = 0
     DAY_OF_WEEK = 1
     all_volume = np.concatenate([v_train[:, :, :, :, AVERAGE_VOLUME].flatten(), v_test[:, :, :, :, AVERAGE_VOLUME].flatten()])
@@ -50,6 +50,7 @@ def main():
 
     INPUT_TW = ((18, 19, 20, 21, 22, 23), (45, 46, 47, 48, 49, 50))
     REQUIRED_TW = ((24, 25, 26, 27, 28, 29), (51, 52, 53, 54, 55, 56))
+    feature_weight = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5]
 
     #  cross_validate
     fold = 10
@@ -67,7 +68,7 @@ def main():
                 _train_result = to_bins_idx(_train[:, r_tw, 0])
                 _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
                 _test_result = _test[:, r_tw, 0]
-                _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list))
+                _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list, feature_weights=feature_weight))
                 rst_count += len(r_tw)
                 with np.errstate(divide='ignore', invalid='ignore'):
                     diff = np.abs(_predict_result - _test_result)
@@ -86,7 +87,7 @@ def main():
                 _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
                 _train_result = to_bins_idx(_train[:, r_tw, 0])
                 _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
-                _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list))
+                _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list, feature_weights=feature_weight))
                 for day in range(np.size(v_test, 2)):
                     for idx, tw in enumerate(r_tw):
                         timestamp = int(all_days[day]) * 86400 - 3600 * 8 + 1200 * tw
