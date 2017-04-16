@@ -7,3 +7,4 @@ training/
 *.csv
 pic/
 __pycache__/
+*.pickle

@@ -34,7 +34,7 @@ def main():
     v_test, all_ids, all_days = extract_volume_knn("./testing_phase1/volume(table 6)_test1.csv", "volume_for_knn_test.npy")
     log("Train data shape:", np.shape(v_train))
     log("Test data shape:", np.shape(v_test))
-    num_bins = 21
+    num_bins = 26
     AVERAGE_VOLUME = 0
     DAY_OF_WEEK = 1
     all_volume = np.concatenate([v_train[:, :, :, :, AVERAGE_VOLUME].flatten(), v_test[:, :, :, :, AVERAGE_VOLUME].flatten()])
@@ -52,7 +52,7 @@ def main():
     REQUIRED_TW = ((24, 25, 26, 27, 28, 29), (51, 52, 53, 54, 55, 56))
 
     #  cross_validate
-    fold = 20
+    fold = 10
     rst_sum, rst_count = 0, 0
     train_day_idx_partition = int(np.size(v_train, 2) / fold)
     day_idx = np.arange(0, np.size(v_train, 2))
@@ -90,7 +90,7 @@ def main():
                 for day in range(np.size(v_test, 2)):
                     for idx, tw in enumerate(r_tw):
                         timestamp = int(all_days[day]) * 86400 - 3600 * 8 + 1200 * tw
-                        print("%s, [%s, %s), %s, %d" % (all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "), datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction, np.asscalar(_predict_result[day, idx])), file=test_output_file)
+                        print("%s, [%s,%s), %s, %d" % (all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "), datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction, np.asscalar(_predict_result[day, idx])), file=test_output_file)
     test_output_file.close()
 
 if __name__ == '__main__':
