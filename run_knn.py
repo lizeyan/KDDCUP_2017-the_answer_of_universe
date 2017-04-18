@@ -94,7 +94,7 @@ def main():
                 for day in range(np.size(v_test, 2)):
                     for idx, tw in enumerate(r_tw):
                         timestamp = int(all_days[day]) * 86400 - 3600 * 8 + 1200 * tw
-                        print("%s, \"[%s,%s)\", %s, %f" % (all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "), datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction, np.asscalar(_predict_result[day, idx])), file=test_output_file)
+                        print("%s,\"[%s,%s)\",%s,%f" % (all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "), datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction, np.asscalar(_predict_result[day, idx])), file=test_output_file)
     test_output_file.close()
 
 if __name__ == '__main__':
