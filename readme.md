@@ -18,6 +18,13 @@ KDD CUP 2017
   - 使用HMM方法测试
   - 使用RNN方法测试
 
+## 2017-04-18
+
+- KNN调参尝试：
+  - 结果：```num_bins = 51, k =6, feature_weight = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0, 0.7, 0.9], feature = [六个时间窗的volume, day, is_holiday]```
+- 尝试决策树、随机森林：
+  - MAPE测试结果并不比KNN好
+
 # Expected File Structure:
 
 ```

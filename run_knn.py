@@ -2,7 +2,8 @@ from datetime import *
 import numpy as np
 from extract_features import *
 from scipy.stats import *
-
+import sys
+from sklearn import tree, ensemble
 
 def get_bins(num_bins, flatten_arr):
     assert 0 < num_bins < 100 and isinstance(num_bins, int) and 100 % num_bins is 0
@@ -34,7 +35,9 @@ def main():
     v_test, all_ids, all_days = extract_volume_knn("./testing_phase1/volume(table 6)_test1.csv", "volume_for_knn_test.npy")
     log("Train data shape:", np.shape(v_train))
     log("Test data shape:", np.shape(v_test))
-    num_bins = 21
+
+
+    num_bins = int(sys.argv[1])
     AVERAGE_VOLUME = 0
     DAY_OF_WEEK = 1
     all_volume = np.concatenate([v_train[:, :, :, :, AVERAGE_VOLUME].flatten(), v_test[:, :, :, :, AVERAGE_VOLUME].flatten()])
@@ -50,7 +53,10 @@ def main():
 
     INPUT_TW = ((18, 19, 20, 21, 22, 23), (45, 46, 47, 48, 49, 50))
     REQUIRED_TW = ((24, 25, 26, 27, 28, 29), (51, 52, 53, 54, 55, 56))
-    feature_weight = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5]
+    feature_weight = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0, float(sys.argv[2]), float(sys.argv[3])]
+
+    k = int(sys.argv[4])
+    method = sys.argv[5]
 
     #  cross_validate
     fold = 10
@@ -68,7 +74,22 @@ def main():
                 _train_result = to_bins_idx(_train[:, r_tw, 0])
                 _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
                 _test_result = _test[:, r_tw, 0]
-                _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list, feature_weights=feature_weight))
+
+                # Choose a model (by command argv[5])
+                if method == "knn":     # KNN
+                    _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list, k=k, feature_weights=feature_weight))
+                elif method == "dt":    # Decision Tree
+                    model = tree.DecisionTreeClassifier()
+                    model.fit(_train_list, _train_result)
+                    _predict_result = model.predict(_test_list)
+                    _predict_result = from_bins_idx(_predict_result.astype(int))
+                elif method == "rf":    # Random Forest
+                    model = ensemble.RandomForestClassifier(n_estimators=1000)
+                    model.fit(_train_list, _train_result)
+                    _predict_result = model.predict(_test_list)
+                    _predict_result = from_bins_idx(_predict_result.astype(int))
+
+
                 rst_count += len(r_tw)
                 with np.errstate(divide='ignore', invalid='ignore'):
                     diff = np.abs(_predict_result - _test_result)
