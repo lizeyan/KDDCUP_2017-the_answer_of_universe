@@ -41,6 +41,9 @@ def main():
     volume_bins = get_bins(num_bins - 1, all_volume[all_volume > 0])
     volume_bins = [0] + volume_bins
     print(volume_bins)
+    volume_predict = np.asarray(volume_bins.copy(), dtype=float)
+    volume_predict[:-1] = (volume_predict[:-1] + volume_predict[1:]) / 2
+    print(volume_predict)
 
     def from_bins_idx(arr):
         return np.vectorize(volume_bins.__getitem__)(arr)
@@ -71,8 +74,8 @@ def main():
                 _predict_result = from_bins_idx(knn_predict(_train_list, _train_result, _test_list, feature_weights=feature_weight))
                 rst_count += len(r_tw)
                 with np.errstate(divide='ignore', invalid='ignore'):
-                    diff = np.abs(_predict_result - _test_result)
-                    fraction = diff / _test_result
+                    diff = np.abs(_predict_result[_test_result != 0] - _test_result[_test_result != 0])
+                    fraction = diff / _test_result[_test_result != 0]
                     fraction[diff == 0] = 0
                     rst_sum += np.sum(fraction)
     log("Cross validate MAPE by KNN", rst_sum / rst_count * 2)
@@ -91,7 +94,7 @@ def main():
                 for day in range(np.size(v_test, 2)):
                     for idx, tw in enumerate(r_tw):
                         timestamp = int(all_days[day]) * 86400 - 3600 * 8 + 1200 * tw
-                        print("%s, [%s,%s), %s, %d" % (all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "), datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction, np.asscalar(_predict_result[day, idx])), file=test_output_file)
+                        print("%s, \"[%s,%s)\", %s, %f" % (all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "), datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction, np.asscalar(_predict_result[day, idx])), file=test_output_file)
     test_output_file.close()
 
 if __name__ == '__main__':
