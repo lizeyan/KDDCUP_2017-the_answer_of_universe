@@ -50,16 +50,19 @@ def prepare_data(num_bins):
     return v_train, v_test, all_ids, all_days, volume_bins
 
 
-def run(method, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, cross_validate=True, fold=10, **kwargs):
+def run(method_list, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, cross_validate=True, fold=10, **kwargs):
     INPUT_TW = ((18, 19, 20, 21, 22, 23), (45, 46, 47, 48, 49, 50))
     REQUIRED_TW = ((24, 25, 26, 27, 28, 29), (51, 52, 53, 54, 55, 56))
 
-    if method == "knn":
+    # all params:
+    feature_weight, k, n_estimators, max_depth = None, None, None, None
+    if "knn" in method_list:
         feature_weight = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0, kwargs["weight1"], kwargs["weight2"]]
         k = kwargs["k"]
-    elif method == "rf":
+    elif "rf" in method_list:
         n_estimators = kwargs["n_estimators"]
-    elif method == "dt":
+        max_depth = kwargs["max_depth"]
+    elif "dt" in method_list:
         max_depth = kwargs["max_depth"]
     else:
         assert False, "invalid method"
@@ -80,23 +83,22 @@ def run(method, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, 
                     _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
                     _test_result = _test[:, r_tw, 0]
 
+                    _predict_result = []
                     # Choose a model (by command argv[5])
-                    if method == "knn":  # KNN
-                        _predict_result = from_bins_idx(
-                            knn_predict(_train_list, _train_result, _test_list, k=k, feature_weights=feature_weight))
-                    elif method == "dt":  # Decision Tree
+                    if "knn" in method_list:  # KNN
+                        _predict_result.append(from_bins_idx(
+                            knn_predict(_train_list, _train_result, _test_list, k=k, feature_weights=feature_weight)))
+                    elif "dt" in method_list:  # Decision Tree
                         model = tree.DecisionTreeClassifier(max_depth=max_depth)
                         model.fit(_train_list, _train_result)
-                        _predict_result = model.predict(_test_list)
-                        _predict_result = from_bins_idx(_predict_result.astype(int))
-                    elif method == "rf":  # Random Forest
-                        model = ensemble.RandomForestClassifier(n_estimators=n_estimators)
+                        _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
+                    elif "rf" in method_list:  # Random Forest
+                        model = ensemble.RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth)
                         model.fit(_train_list, _train_result)
-                        _predict_result = model.predict(_test_list)
-                        _predict_result = from_bins_idx(_predict_result.astype(int))
+                        _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
                     else:
                         assert False, "invalid method"
-
+                    _predict_result = np.mean(_predict_result, axis=0)
                     rst_count += len(r_tw)
                     with np.errstate(divide='ignore', invalid='ignore'):
                         diff = np.abs(_predict_result[_test_result != 0] - _test_result[_test_result != 0])
@@ -107,7 +109,7 @@ def run(method, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, 
         # log("Cross validate MAPE by %s" % method, mape)
         return mape
     else:  # test
-        test_output_file = open("volume_output_%s.csv" % method, "w+")
+        test_output_file = open("volume_output.csv", "w+")
         print("tollgate_id, time_window, direction, volume", file=test_output_file)
         for tollgate_id in range(np.size(v_train, 0)):
             for direction in range(np.size(v_train, 1)):
@@ -117,21 +119,21 @@ def run(method, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, 
                     _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
                     _train_result = to_bins_idx(_train[:, r_tw, 0])
                     _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
-                    if method == "knn":  # KNN
-                        _predict_result = from_bins_idx(
-                            knn_predict(_train_list, _train_result, _test_list, k=k, feature_weights=feature_weight))
-                    elif method == "dt":  # Decision Tree
+                    _predict_result = []
+                    if "knn" in method_list:  # KNN
+                        _predict_result.append(from_bins_idx(
+                            knn_predict(_train_list, _train_result, _test_list, k=k, feature_weights=feature_weight)))
+                    elif "dt" in method_list:  # Decision Tree
                         model = tree.DecisionTreeClassifier(max_depth=max_depth)
                         model.fit(_train_list, _train_result)
-                        _predict_result = model.predict(_test_list)
-                        _predict_result = from_bins_idx(_predict_result.astype(int))
-                    elif method == "rf":  # Random Forest
+                        _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
+                    elif "rf" in method_list:  # Random Forest
                         model = ensemble.RandomForestClassifier(n_estimators=n_estimators)
                         model.fit(_train_list, _train_result)
-                        _predict_result = model.predict(_test_list)
-                        _predict_result = from_bins_idx(_predict_result.astype(int))
+                        _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
                     else:
                         assert False, "invalid method"
+                    _predict_result = np.mean(_predict_result, axis=0)
                     for day in range(np.size(v_test, 2)):
                         for idx, tw in enumerate(r_tw):
                             timestamp = int(all_days[day]) * 86400 - 3600 * 8 + 1200 * tw
@@ -142,15 +144,15 @@ def run(method, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, 
         test_output_file.close()
 
 
-def test_method(rounds, method, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, **kwargs):
+def test_method(rounds, method_list, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, **kwargs):
 
     mape_list = []
     for i in range(rounds):
         mape_list.append(
-            run(method, v_train=v_train, v_test=v_test, all_ids=all_ids, all_days=all_days,
+            run(method_list, v_train=v_train, v_test=v_test, all_ids=all_ids, all_days=all_days,
                 from_bins_idx=from_bins_idx, to_bins_idx=to_bins_idx, **kwargs))
     # thread_pool.shutdown(wait=True)
-    print("Average MAPE of %s = " % method, np.mean(mape_list))
+    print("Average MAPE of %s = " % str(method_list), np.mean(mape_list))
 
 
 def main():
@@ -160,6 +162,7 @@ def main():
     weight1 = 0.7
     k = 6
     max_depth = 3
+    n_estimator = 100
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin)
 
     def from_bins_idx(arr):
@@ -168,13 +171,11 @@ def main():
     def to_bins_idx(arr):
         return np.searchsorted(volume_bins, arr)
 
-    # test_method(rounds, "knn", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, weight1=weight1, weight2=weight2, k=k)
-    # for max_depth in range(1, 10):
-    #     print("max_depth:", max_depth)
-    #     test_method(rounds, "dt", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, max_depth=max_depth)
     test_method(rounds, "dt", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, max_depth=max_depth)
+    test_method(rounds, ["dt", "knn", "rf"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, max_depth=max_depth, weight1=weight1, weight2=weight2, k=k, n_estimator=n_estimator)
     # test_method(rounds, "rf", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, n_estimators=5)
-    run("dt", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth)
+    run(["dt"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth)
+    run(["dt", "knn", "rf"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth, weight1=weight1, weight2=weight2, k=k, n_estimator=n_estimator)
 
 
 if __name__ == '__main__':
