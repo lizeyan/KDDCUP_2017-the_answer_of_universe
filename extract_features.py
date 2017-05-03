@@ -195,7 +195,7 @@ def extract_weather(path_to_file, output_file) -> np.ndarray:
     return np.loadtxt(output_file)
 
 
-def extract_volume_knn(path_to_file, output_file):
+def extract_volume_knn(path_to_file, output_file, time_window_seconds=1200, refresh=False):
     """
     0 axis: tollgate
     1 axis: direction
@@ -210,7 +210,10 @@ def extract_volume_knn(path_to_file, output_file):
     DOW = 1
     HLD = 2
     features_count = 3
-    if os.path.exists(output_file):
+    assert time_window_seconds % 60 == 0
+    time_window_minutes = int(time_window_seconds / 60)
+    assert 60 % time_window_minutes == 0 and 60 / time_window_minutes >= 1
+    if os.path.exists(output_file) and not refresh:
         all_ids = pickle.load(open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "rb"))
         all_days = pickle.load(open("%s_all_days.pickle" % output_file.rstrip(".npy"), "rb"))
         return np.load(output_file), all_ids, all_days
@@ -226,8 +229,8 @@ def extract_volume_knn(path_to_file, output_file):
         vehicle_model = entry_list[3]
         has_etc = entry_list[4]
         pass_time = entry_list[0]
-        pass_time = datetime.strptime(pass_time, "%Y-%m-%d %H:%M:%S")
-        pass_minute = int(np.math.floor(pass_time.minute / 20) * 20)
+        pass_time = datetime.strptime(pass_time, "%Y-%m-%d %H:%M:%S")   # automatically use locale time
+        pass_minute = int(np.math.floor(pass_time.minute / time_window_minutes) * time_window_minutes)
         start_time_window = datetime(pass_time.year, pass_time.month, pass_time.day,
                                      pass_time.hour, pass_minute, 0)
         start_time_window = start_time_window.timestamp()
@@ -240,7 +243,7 @@ def extract_volume_knn(path_to_file, output_file):
     all_days = np.sort(np.unique(raw_data[:, 2]))
     day_count = np.size(all_days)
 
-    time_windows_count = int(86400 / 1200)
+    time_windows_count = int(86400 / time_window_seconds)
     shape = (tollgate_id_count, direction_count, day_count, time_windows_count, features_count)
     log("shape of raw volume data:", shape)
     volume_for_knn = np.zeros(shape=shape, dtype=int)
@@ -257,11 +260,10 @@ def extract_volume_knn(path_to_file, output_file):
     test = set()
     for entry in raw_data:
         day_index = invert_day_dict[entry[2]]
-        time_windows_index = int(entry[3] / 1200)
+        time_windows_index = int(entry[3] / time_window_seconds)
         id_index = invert_id_dict[entry[0]]
         test.add((time_windows_index + 1))
         volume_for_knn[id_index, entry[1], day_index, time_windows_index, AV] += 1
-    print(len(test))
     np.save(output_file, volume_for_knn)
     pickle.dump(all_ids, file=open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "wb+"))
     pickle.dump(all_days, file=open("%s_all_days.pickle" % output_file.rstrip(".npy"), "wb+"))
