@@ -1,5 +1,3 @@
-from datetime import *
-import numpy as np
 from functools import reduce
 
 from extract_features import *
@@ -29,8 +27,6 @@ def knn_predict(train_list, train_result, test_list, k=9) -> np.ndarray:
     squared_diff = (np.expand_dims(test_list, 1) - np.expand_dims(train_list, 0)) ** 2  # n_test * n_train
     distances = np.sum(squared_diff, axis=2)
     k_neighbors = np.argsort(distances, axis=1)[:, :k]  # n_test * k
-    # result = mode(train_result[k_neighbors], axis=1)[0]  # n_test * d_result
-    # return np.squeeze(result, 1)
     result = np.mean(train_result[k_neighbors], axis=1).astype(int)  # n_test * d_result
     return result
 
@@ -55,6 +51,8 @@ def prepare_data(num_bins, **kwargs):
 
 
 def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
+    def sum_tws(data, num_sum):
+        return np.transpose(np.sum(np.split(data, int(np.size(data, 1) / num_sum), axis=1), axis=2))
     v_train = inputs["v_train"]
     v_test = inputs["v_test"]
     all_ids = inputs["all_ids"]
@@ -86,7 +84,6 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
         day_idx_test, day_idx_train = day_idx[:train_day_idx_partition], day_idx[train_day_idx_partition:]
         for tollgate_id in range(np.size(v_train, 0)):
             for direction in range(np.size(v_train, 1)):
-                # for i_tw, r_tw in zip(INPUT_TW, REQUIRED_TW):
                 i_tw = reduce(lambda x, y: x + y, INPUT_TW)
                 r_tw = reduce(lambda x, y: x + y, REQUIRED_TW)
                 _train = v_train[tollgate_id, direction, day_idx_train, :, :]
@@ -95,9 +92,9 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
                 _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
                 _test_result = _test[:, r_tw, 0]
+                _test_result = sum_tws(_test_result, inputs["num_sum"])
 
                 _predict_result = []
-                # Choose a model (by command argv[5])
                 if "knn" in method_list:  # KNN
                     _predict_result.append(from_bins_idx(
                         knn_predict(_train_list, _train_result, _test_list, k=k)))
@@ -114,17 +111,19 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 else:
                     assert False, "invalid method"
                 _predict_result = np.mean(_predict_result, axis=0)
-                rst_count += len(r_tw)
+                _predict_result = sum_tws(_predict_result, inputs["num_sum"])
+
+                rst_count += np.size(_predict_result)
                 with np.errstate(divide='ignore', invalid='ignore'):
                     diff = np.abs(_predict_result[_test_result != 0] - _test_result[_test_result != 0])
                     fraction = diff / (_test_result[_test_result != 0] + np.asarray((EPS,)))
                     fraction[diff == 0] = 0
                     rst_sum += np.sum(fraction)
-        mape = rst_sum / rst_count * 2
-        # log("Cross validate MAPE by %s" % method, mape)
+        mape = rst_sum / rst_count
         return mape
     else:  # test
-        test_output_file = open("volume_output.csv", "w+")
+        tw_seconds = inputs["time_window_seconds"]
+        test_output_file = open("volume_output_%s_%d.csv" % ("_".join(method_list), int(datetime.now().timestamp())), "w+")
         print("tollgate_id, time_window, direction, volume", file=test_output_file)
         for tollgate_id in range(np.size(v_train, 0)):
             for direction in range(np.size(v_train, 1)):
@@ -152,13 +151,15 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 else:
                     assert False, "invalid method"
                 _predict_result = np.mean(_predict_result, axis=0)
+                _predict_result = sum_tws(_predict_result, inputs["num_sum"])
                 for day in range(np.size(v_test, 2)):
-                    for idx, tw in enumerate(r_tw):
-                        timestamp = int(all_days[day]) * 86400 - 3600 * 8 + 1200 * tw
+                    for idx in range(0, len(r_tw), inputs["num_sum"]):
+                        tw = r_tw[idx]
+                        timestamp = int(all_days[day]) * 86400 - 3600 * 8 + tw_seconds * tw
                         print("%s,\"[%s,%s)\",%s,%f" % (
                             all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "),
                             datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction,
-                            np.asscalar(_predict_result[day, idx])), file=test_output_file)
+                            np.asscalar(_predict_result[day, int(idx / inputs["num_sum"])])), file=test_output_file)
         test_output_file.close()
 
 
@@ -172,12 +173,12 @@ def test_method(rounds, method_list, inputs, **kwargs):
 def main():
     rounds = 100
     num_bin = 51
-    k = 6
-    max_depth = 3
+    k = 7
+    max_depth = 4
     n_estimator = 100
     tw_seconds = 60
 
-    v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds, refresh=True)
+    v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds, refresh=False)
 
     def from_bins_idx(arr):
         return np.vectorize(volume_bins.__getitem__)(arr)
@@ -194,15 +195,16 @@ def main():
         "all_days": all_days,
         "input_tw": (tuple(range(int(6 * 3600 / tw_seconds), int(8 * 3600 / tw_seconds))), tuple(range(int(15 * 3600 / tw_seconds), int(17 * 3600 / tw_seconds)))),
         "required_tw": (tuple(range(int(8 * 3600 / tw_seconds), int(10 * 3600 / tw_seconds))), tuple(range(int(17 * 3600 / tw_seconds), int(19 * 3600 / tw_seconds)))),
+        "num_sum": int(1200 / tw_seconds),
+        "time_window_seconds": tw_seconds,
     }
 
     test_method(rounds, ["dt"], inputs, max_depth=max_depth)
     test_method(rounds, ["average"], inputs, max_depth=max_depth)
     test_method(rounds, ["knn"], inputs, max_depth=max_depth, k=k)
     test_method(rounds, ["dt", "knn"], inputs, max_depth=max_depth, k=k)
-    test_method(rounds, ["dt", "knn", "rf"], inputs, max_depth=max_depth, k=k)
-    run(["knn"], inputs, False, max_depth=max_depth, k=k)
-    run(["knn"], inputs, False, max_depth=max_depth, k=k)
+    # test_method(rounds, ["dt", "knn", "rf"], inputs, max_depth=max_depth, k=k)
+    run(["knn", "dt"], inputs, False, max_depth=max_depth, k=k)
 
 
 if __name__ == '__main__':
