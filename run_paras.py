@@ -27,6 +27,11 @@ def knn_predict(train_list, train_result, test_list, k=9) -> np.ndarray:
     squared_diff = (np.expand_dims(test_list, 1) - np.expand_dims(train_list, 0)) ** 2  # n_test * n_train
     distances = np.sum(squared_diff, axis=2)
     k_neighbors = np.argsort(distances, axis=1)[:, :k]  # n_test * k
+
+    # weight_distances = distances[np.arange(np.size(distances, 0))[:, None], k_neighbors]
+    # weight_distances /= np.expand_dims(np.sum(weight_distances, axis=1), 1)
+    # result = np.sum(train_result[k_neighbors] * np.expand_dims(weight_distances, 2), axis=1).astype(int)  # n_test * d_result
+
     result = np.mean(train_result[k_neighbors], axis=1).astype(int)  # n_test * d_result
     return result
 
