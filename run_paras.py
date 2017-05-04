@@ -2,7 +2,7 @@ from functools import reduce
 
 from extract_features import *
 from scipy.stats import *
-from sklearn import tree, ensemble
+from sklearn import tree, ensemble, svm, linear_model, neural_network
 from concurrent.futures import *
 
 
@@ -28,10 +28,6 @@ def knn_predict(train_list, train_result, test_list, k=9) -> np.ndarray:
     distances = np.sum(squared_diff, axis=2)
     k_neighbors = np.argsort(distances, axis=1)[:, :k]  # n_test * k
 
-    # weight_distances = distances[np.arange(np.size(distances, 0))[:, None], k_neighbors]
-    # weight_distances /= np.expand_dims(np.sum(weight_distances, axis=1), 1)
-    # result = np.sum(train_result[k_neighbors] * np.expand_dims(weight_distances, 2), axis=1).astype(int)  # n_test * d_result
-
     result = np.mean(train_result[k_neighbors], axis=1).astype(int)  # n_test * d_result
     return result
 
@@ -55,6 +51,38 @@ def prepare_data(num_bins, **kwargs):
     return v_train, v_test, all_ids, all_days, volume_bins
 
 
+def predict(_train_list, _train_result, _test_list, __method_list, **kwargs):
+    def fit_predict_each_output(__model):
+        __predict_result = []
+        for idx in range(np.size(_train_result, 1)):
+            __model.fit(_train_list, _train_result[:, idx])
+            __predict_result.append(__model.predict(_test_list))
+        return np.transpose(np.asarray(__predict_result))
+
+    def fit_predict(__model):
+        __model.fit(_train_list, _train_result)
+        return __model.predict(_test_list)
+
+    from_bins_idx = kwargs["from_bins_idx"]
+    _predict_result = []
+    if "knn" in __method_list:
+        _predict_result.append(
+            knn_predict(_train_list, _train_result, _test_list, k=kwargs["k"]))
+    elif "dt" in __method_list:
+        _predict_result.append(fit_predict(tree.DecisionTreeClassifier(max_depth=kwargs["max_depth"])))
+    elif "rf" in __method_list:
+        _predict_result.append(fit_predict(ensemble.RandomForestClassifier(n_estimators=kwargs["n_estimators"], max_depth=kwargs["max_depth"], n_jobs=kwargs["n_jobs"])))
+    elif "average" in __method_list:
+        _predict_result.append(average_predict(_train_result, _test_list))
+    elif "adaboost" in __method_list:
+        _predict_result.append(fit_predict_each_output(ensemble.AdaBoostClassifier()))
+    elif "ridge" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.RidgeClassifier()))
+    else:
+        assert False, "invalid method"
+    return from_bins_idx(np.asarray(_predict_result, dtype=int))
+
+
 def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
     def sum_tws(data, num_sum):
         return np.transpose(np.sum(np.split(data, int(np.size(data, 1) / num_sum), axis=1), axis=2))
@@ -66,20 +94,6 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
     to_bins_idx = inputs["to_bins_idx"]
     INPUT_TW = inputs["input_tw"]
     REQUIRED_TW = inputs["required_tw"]
-
-    # all params:
-    feature_weight, k, n_estimators, max_depth = None, None, None, None
-    if "knn" in method_list:
-        k = kwargs["k"]
-    elif "rf" in method_list:
-        n_estimators = kwargs["n_estimators"]
-        max_depth = kwargs["max_depth"]
-    elif "dt" in method_list:
-        max_depth = kwargs["max_depth"]
-    elif "average" in method_list:
-        pass
-    else:
-        assert False, "invalid method"
 
     if cross_validate:  # cross validate
         rst_sum, rst_count = 0, 0
@@ -99,22 +113,7 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 _test_result = _test[:, r_tw, 0]
                 _test_result = sum_tws(_test_result, inputs["num_sum"])
 
-                _predict_result = []
-                if "knn" in method_list:  # KNN
-                    _predict_result.append(from_bins_idx(
-                        knn_predict(_train_list, _train_result, _test_list, k=k)))
-                elif "dt" in method_list:  # Decision Tree
-                    model = tree.DecisionTreeClassifier(max_depth=max_depth)
-                    model.fit(_train_list, _train_result)
-                    _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
-                elif "rf" in method_list:  # Random Forest
-                    model = ensemble.RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth)
-                    model.fit(_train_list, _train_result)
-                    _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
-                elif "average" in method_list:
-                    _predict_result.append(from_bins_idx(average_predict(_train_result, _test_list).astype(int)))
-                else:
-                    assert False, "invalid method"
+                _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx)
                 _predict_result = np.mean(_predict_result, axis=0)
                 _predict_result = sum_tws(_predict_result, inputs["num_sum"])
 
@@ -139,24 +138,11 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
                 _train_result = to_bins_idx(_train[:, r_tw, 0])
                 _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
-                _predict_result = []
-                if "knn" in method_list:  # KNN
-                    _predict_result.append(from_bins_idx(
-                        knn_predict(_train_list, _train_result, _test_list, k=k)))
-                elif "dt" in method_list:  # Decision Tree
-                    model = tree.DecisionTreeClassifier(max_depth=max_depth)
-                    model.fit(_train_list, _train_result)
-                    _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
-                elif "rf" in method_list:  # Random Forest
-                    model = ensemble.RandomForestClassifier(n_estimators=n_estimators)
-                    model.fit(_train_list, _train_result)
-                    _predict_result.append(from_bins_idx(model.predict(_test_list).astype(int)))
-                elif "average" in method_list:
-                    _predict_result.append(from_bins_idx(average_predict(_train_result, _test_list).astype(int)))
-                else:
-                    assert False, "invalid method"
+
+                _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx)
                 _predict_result = np.mean(_predict_result, axis=0)
                 _predict_result = sum_tws(_predict_result, inputs["num_sum"])
+
                 for day in range(np.size(v_test, 2)):
                     for idx in range(0, len(r_tw), inputs["num_sum"]):
                         tw = r_tw[idx]
@@ -178,9 +164,12 @@ def test_method(rounds, method_list, inputs, **kwargs):
 def main():
     rounds = 100
     num_bin = 51
-    k = 7
-    max_depth = 4
-    n_estimator = 100
+    params = {
+        "k": 7,
+        "max_depth": 4,
+        "n_estimators": 100,
+        "n_jobs": 8
+    }
     tw_seconds = 60
 
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds, refresh=False)
@@ -204,12 +193,16 @@ def main():
         "time_window_seconds": tw_seconds,
     }
 
-    test_method(rounds, ["dt"], inputs, max_depth=max_depth)
-    test_method(rounds, ["average"], inputs, max_depth=max_depth)
-    test_method(rounds, ["knn"], inputs, max_depth=max_depth, k=k)
-    test_method(rounds, ["dt", "knn"], inputs, max_depth=max_depth, k=k)
-    # test_method(rounds, ["dt", "knn", "rf"], inputs, max_depth=max_depth, k=k)
-    run(["knn", "dt"], inputs, False, max_depth=max_depth, k=k)
+    # test_method(rounds, ["adaboost"], inputs, **params)
+    # test_method(rounds, ["ridge"], inputs, **params)
+    # test_method(rounds, ["dt"], inputs, **params)
+    # test_method(rounds, ["average"], inputs, **params)
+    # test_method(rounds, ["knn"], inputs, **params)
+    # test_method(rounds, ["knn", "ridge"], inputs, **params)
+    # test_method(rounds, ["dt", "ridge"], inputs, **params)
+    # test_method(rounds, ["dt", "ridge", "knn"], inputs, **params)
+    # test_method(rounds, ["rf"], inputs, **params)
+    run(["ridge"], inputs, False, **params)
 
 
 if __name__ == '__main__':
