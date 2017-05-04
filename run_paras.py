@@ -78,6 +78,24 @@ def predict(_train_list, _train_result, _test_list, __method_list, **kwargs):
         _predict_result.append(fit_predict_each_output(ensemble.AdaBoostClassifier()))
     elif "ridge" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.RidgeClassifier()))
+    elif "linear" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.LinearRegression()))
+        return np.asarray(_predict_result)
+    elif "huber" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.HuberRegressor()))
+        return np.asarray(_predict_result)
+    elif "theilsen" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.TheilSenRegressor()))
+        return np.asarray(_predict_result)
+    elif "lasso" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.Lasso()))
+        return np.asarray(_predict_result)
+    elif "par" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.PassiveAggressiveRegressor()))
+        return np.asarray(_predict_result)
+    elif "ridge_reg" in __method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.Ridge()))
+        return np.asarray(_predict_result)
     else:
         assert False, "invalid method"
     return from_bins_idx(np.asarray(_predict_result, dtype=int))
@@ -107,9 +125,16 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 r_tw = reduce(lambda x, y: x + y, REQUIRED_TW)
                 _train = v_train[tollgate_id, direction, day_idx_train, :, :]
                 _test = v_train[tollgate_id, direction, day_idx_test, :, :]
-                _train_result = to_bins_idx(_train[:, r_tw, 0])
-                _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
-                _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
+                # for Classifier
+                # _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
+                # _train_result = to_bins_idx(_train[:, r_tw, 0])
+                # _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
+
+                # for Regressor
+                _train_list = np.concatenate([_train[:, i_tw, 0], _train[:, 0, 1:]], axis=1)
+                _train_result = _train[:, r_tw, 0]
+                _test_list = np.concatenate([_test[:, i_tw, 0], _test[:, 0, 1:]], axis=1)
+
                 _test_result = _test[:, r_tw, 0]
                 _test_result = sum_tws(_test_result, inputs["num_sum"])
 
@@ -135,9 +160,13 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
                 r_tw = reduce(lambda x, y: x + y, REQUIRED_TW)
                 _train = v_train[tollgate_id, direction, :, :, :]
                 _test = v_test[tollgate_id, direction, :, :, :]
-                _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
-                _train_result = to_bins_idx(_train[:, r_tw, 0])
-                _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
+                # _train_list = np.concatenate([to_bins_idx(_train[:, i_tw, 0]), _train[:, 0, 1:]], axis=1)
+                # _train_result = to_bins_idx(_train[:, r_tw, 0])
+                # _test_list = np.concatenate([to_bins_idx(_test[:, i_tw, 0]), _test[:, 0, 1:]], axis=1)
+
+                _train_list = np.concatenate([_train[:, i_tw, 0], _train[:, 0, 1:]], axis=1)
+                _train_result = _train[:, r_tw, 0]
+                _test_list = np.concatenate([_test[:, i_tw, 0], _test[:, 0, 1:]], axis=1)
 
                 _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx)
                 _predict_result = np.mean(_predict_result, axis=0)
@@ -158,6 +187,8 @@ def test_method(rounds, method_list, inputs, **kwargs):
     mape_list = []
     for i in range(rounds):
         mape_list.append(run(method_list, inputs, **kwargs))
+        if i % 10 == 0:
+            print("finished rounds: ", i)
     print("Average MAPE of %s = " % str(method_list), np.mean(mape_list))
 
 
@@ -202,8 +233,13 @@ def main():
     # test_method(rounds, ["dt", "ridge"], inputs, **params)
     # test_method(rounds, ["dt", "ridge", "knn"], inputs, **params)
     # test_method(rounds, ["rf"], inputs, **params)
-    run(["ridge"], inputs, False, **params)
+    # run(["ridge"], inputs, False, **params)
 
+    # test_method(rounds, ["linear"], inputs, **params)
+    # test_method(rounds, ["huber"], inputs, **params)
+    test_method(rounds, ["theilsen"], inputs, **params)
+    # test_method(rounds, ["par"], inputs, **params)
+    # test_method(rounds, ["ridge_reg"], inputs, **params)
 
 if __name__ == '__main__':
     thread_pool = ThreadPoolExecutor(max_workers=4)
