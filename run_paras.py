@@ -17,6 +17,8 @@ def get_bins(num_bins, flatten_arr):
 def knn_predict(train_list, train_result, test_list, k=9, feature_weights=None) -> np.ndarray:
     assert np.size(train_list, 1) == np.size(test_list, 1)
     assert np.size(train_list, 0) == np.size(train_result, 0)
+    #print(feature_weights)
+    #feature_weights = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.9]
     d_feature = np.size(train_list, 1)
     # d_result = np.size(train_result, 1)
     if feature_weights is None:
@@ -24,6 +26,8 @@ def knn_predict(train_list, train_result, test_list, k=9, feature_weights=None) 
     train_list = np.asarray(train_list, dtype=np.float64)
     test_list = np.asarray(test_list, dtype=np.float64)
     squared_diff = (np.expand_dims(test_list, 1) - np.expand_dims(train_list, 0)) ** 2  # n_test * n_train
+    #feature_weights = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,0.9]
+    #print(feature_weights)
     squared_diff *= np.expand_dims(np.expand_dims(feature_weights, 0), 0)
     distances = np.sum(squared_diff, axis=2)
     k_neighbors = np.argsort(distances, axis=1)[:, :k]  # n_test * k
@@ -32,9 +36,11 @@ def knn_predict(train_list, train_result, test_list, k=9, feature_weights=None) 
 
 
 def prepare_data(num_bins):
-    v_train, _, _ = extract_volume_knn("./training/volume(table 6)_training.csv", "volume_for_knn_train.npy")
+    v_train, _, _ = extract_volume_knn("./training/volume(table 6)_training.csv", "volume_for_knn_train.npy",
+                                       "./training/weather (table 7)_training.csv")
     v_test, all_ids, all_days = extract_volume_knn("./testing_phase1/volume(table 6)_test1.csv",
-                                                   "volume_for_knn_test.npy")
+                                                   "volume_for_knn_test.npy",
+                                                   "./testing_phase1/weather (table 7)_test1.csv")
     # log("Train data shape:", np.shape(v_train))
     # log("Test data shape:", np.shape(v_test))
 
@@ -54,13 +60,18 @@ def run(method_list, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_
     INPUT_TW = ((18, 19, 20, 21, 22, 23), (45, 46, 47, 48, 49, 50))
     REQUIRED_TW = ((24, 25, 26, 27, 28, 29), (51, 52, 53, 54, 55, 56))
 
+    #print(kwargs["max_depth"])
+
     # all params:
     feature_weight, k, n_estimators, max_depth = None, None, None, None
     if "knn" in method_list:
-        feature_weight = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0, kwargs["weight1"], kwargs["weight2"]]
+        feature_weight = [0.1, 0.2, 0.4, 0.7, 0.9, 1.0]
+        feature_weight.extend([kwargs["weight1"]]*7)
+        feature_weight.append(kwargs["weight2"])
+        feature_weight.append(kwargs["weight3"])
         k = kwargs["k"]
     elif "rf" in method_list:
-        n_estimators = kwargs["n_estimators"]
+        n_estimators = kwargs["n_estimator"]
         max_depth = kwargs["max_depth"]
     elif "dt" in method_list:
         max_depth = kwargs["max_depth"]
@@ -68,6 +79,7 @@ def run(method_list, v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_
         assert False, "invalid method"
 
     if cross_validate:  # cross validate
+        #print("cross")
         rst_sum, rst_count = 0, 0
         train_day_idx_partition = int(np.size(v_train, 2) / fold)
         day_idx = np.arange(0, np.size(v_train, 2))
@@ -158,12 +170,17 @@ def test_method(rounds, method_list, v_train, v_test, all_ids, all_days, from_bi
 def main():
     rounds = 1000
     num_bin = 51
+    weight3 = 0.4
     weight2 = 0.9
     weight1 = 0.7
     k = 6
     max_depth = 3
     n_estimator = 100
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin)
+    print("----------")
+    print(v_train[0,0])
+    print(v_train[0,0,0,:])
+
 
     def from_bins_idx(arr):
         return np.vectorize(volume_bins.__getitem__)(arr)
@@ -172,10 +189,16 @@ def main():
         return np.searchsorted(volume_bins, arr)
 
     test_method(rounds, "dt", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, max_depth=max_depth)
-    test_method(rounds, ["dt", "knn", "rf"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, max_depth=max_depth, weight1=weight1, weight2=weight2, k=k, n_estimator=n_estimator)
-    # test_method(rounds, "rf", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, n_estimators=5)
-    run(["dt"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth)
-    run(["dt", "knn", "rf"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth, weight1=weight1, weight2=weight2, k=k, n_estimator=n_estimator)
+    test_method(rounds, "knn", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx,
+                max_depth=max_depth, weight1=weight1, weight2=weight2, weight3=weight3, k=k, n_estimator=n_estimator)
+
+
+    test_method(1, "rf", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx,
+                max_depth=max_depth, weight1=weight1, weight2=weight2, weight3=weight3, k=k, n_estimator=n_estimator)
+    # test_method(rounds, ["dt", "knn", "rf"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, max_depth=max_depth, weight1=weight1, weight2=weight2, weight3=weight3,k=k, n_estimator=n_estimator)
+    # # test_method(rounds, "rf", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, n_estimators=5)
+    # run(["dt"], v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth)
+    run("rf", v_train, v_test, all_ids, all_days, from_bins_idx, to_bins_idx, False, max_depth=max_depth, weight1=weight1, weight2=weight2, weight3=weight3,k=k, n_estimator=n_estimator)
 
 
 if __name__ == '__main__':
