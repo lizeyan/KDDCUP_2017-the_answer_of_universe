@@ -4,6 +4,7 @@
 from datetime import datetime
 import numpy as np
 from pandas import DataFrame
+from sklearn import preprocessing
 from utility import *
 import os
 import pickle
@@ -195,7 +196,8 @@ def extract_weather(path_to_file, output_file) -> np.ndarray:
     return np.loadtxt(output_file)
 
 
-def extract_volume_knn(path_to_file, output_file, time_window_seconds=1200, refresh=False):
+
+def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_window_seconds=1200, refresh=False):
     """
     0 axis: tollgate
     1 axis: direction
@@ -206,10 +208,15 @@ def extract_volume_knn(path_to_file, output_file, time_window_seconds=1200, refr
         1: day of week. 0 by default
         2: is holiday. 0 or 1
     """
+    if not path_to_weather==None:
+        weather_data = extract_weather(path_to_weather, "output_weather_" + path_to_weather[29:])
+        weather_times = weather_data[:,0]
+
     AV = 0
     DOW = 1
-    HLD = 2
-    features_count = 3
+    HLD = 8
+    WD = 9
+    features_count = 10
     assert time_window_seconds % 60 == 0
     time_window_minutes = int(time_window_seconds / 60)
     assert 60 % time_window_minutes == 0 and 60 / time_window_minutes >= 1
@@ -234,7 +241,7 @@ def extract_volume_knn(path_to_file, output_file, time_window_seconds=1200, refr
         start_time_window = datetime(pass_time.year, pass_time.month, pass_time.day,
                                      pass_time.hour, pass_minute, 0)
         start_time_window = start_time_window.timestamp()
-        raw_data.append((tollgate_id, direction, timestamp2day(start_time_window), timestamp2daily(start_time_window), vehicle_model, has_etc))
+        raw_data.append((tollgate_id, direction, timestamp2day(start_time_window), timestamp2daily(start_time_window), vehicle_model, has_etc, start_time_window))
     raw_data = np.asarray(raw_data, dtype=int)
 
     all_ids = np.sort(np.unique(raw_data[:, 0]))
@@ -248,10 +255,13 @@ def extract_volume_knn(path_to_file, output_file, time_window_seconds=1200, refr
     log("shape of raw volume data:", shape)
     volume_for_knn = np.zeros(shape=shape, dtype=int)
     invert_day_dict = {}
+
+
+
     for day in all_days:
         idx = np.asscalar(np.searchsorted(all_days, day))
         invert_day_dict[day] = idx
-        volume_for_knn[:, :, idx, :, DOW] = timestamp2day_of_week(day * 86400 - 3600 * 8)
+        volume_for_knn[:, :, idx, :, DOW+timestamp2day_of_week(day * 86400 - 3600 * 8)] = 1#one hot
         volume_for_knn[:, :, idx, :, HLD] = is_holiday(day * 86400 - 3600 * 8)
     invert_id_dict = {}
     for tollgate_id in all_ids:
@@ -264,6 +274,20 @@ def extract_volume_knn(path_to_file, output_file, time_window_seconds=1200, refr
         id_index = invert_id_dict[entry[0]]
         test.add((time_windows_index + 1))
         volume_for_knn[id_index, entry[1], day_index, time_windows_index, AV] += 1
+
+        if not path_to_weather == None:
+            start_time_window = entry[-1]
+            weather_idx = np.searchsorted(weather_times,start_time_window)
+            if weather_idx >= np.size(weather_times):
+                continue
+            weather_time = weather_times[weather_idx]
+
+            if weather_time - start_time_window > 3 * 60 * 60:
+                # if the time gap is larger than 3 hours
+                continue
+            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WD] = rain_level(weather_data[weather_idx-1,-1])
+
+    print(len(test))
     np.save(output_file, volume_for_knn)
     pickle.dump(all_ids, file=open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "wb+"))
     pickle.dump(all_days, file=open("%s_all_days.pickle" % output_file.rstrip(".npy"), "wb+"))

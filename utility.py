@@ -84,3 +84,15 @@ def clean_dir(path):
     if os.path.exists(path):
         shutil.rmtree(path)
     os.makedirs(path)
+
+def rain_level(precipitation):
+    if(precipitation == 0):
+        return 0
+    elif(precipitation < 990):
+        return 1
+    elif(precipitation < 2490):
+        return 2
+    elif(precipitation < 4990):
+        return 3
+    else:
+        return 4
