@@ -4,6 +4,7 @@ from extract_features import *
 from scipy.stats import *
 from sklearn import tree, ensemble, svm, linear_model, neural_network
 from concurrent.futures import *
+import time
 
 
 def get_bins(num_bins, flatten_arr):
@@ -78,27 +79,29 @@ def predict(_train_list, _train_result, _test_list, __method_list, **kwargs):
         _predict_result.append(fit_predict_each_output(ensemble.AdaBoostClassifier()))
     elif "ridge" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.RidgeClassifier()))
+
     elif "linear" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.LinearRegression()))
-        return np.asarray(_predict_result)
+        # return np.asarray(_predict_result)
     elif "huber" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.HuberRegressor()))
-        return np.asarray(_predict_result)
+        # return np.asarray(_predict_result)
     elif "theilsen" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.TheilSenRegressor()))
-        return np.asarray(_predict_result)
+        # return np.asarray(_predict_result)
     elif "lasso" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.Lasso()))
-        return np.asarray(_predict_result)
+        # return np.asarray(_predict_result)
     elif "par" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.PassiveAggressiveRegressor()))
-        return np.asarray(_predict_result)
+        # return np.asarray(_predict_result)
     elif "ridge_reg" in __method_list:
         _predict_result.append(fit_predict_each_output(linear_model.Ridge()))
-        return np.asarray(_predict_result)
+        # return np.asarray(_predict_result)
     else:
         assert False, "invalid method"
-    return from_bins_idx(np.asarray(_predict_result, dtype=int))
+    return np.asarray(_predict_result)
+    # return from_bins_idx(np.asarray(_predict_result, dtype=int))
 
 
 def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
@@ -187,8 +190,9 @@ def test_method(rounds, method_list, inputs, **kwargs):
     mape_list = []
     for i in range(rounds):
         mape_list.append(run(method_list, inputs, **kwargs))
-        if i % 10 == 0:
-            print("finished rounds: ", i)
+        # if i % 5 == 0:
+        print("finished rounds: ", i)
+        time.sleep(15)
     print("Average MAPE of %s = " % str(method_list), np.mean(mape_list))
 
 
@@ -237,9 +241,14 @@ def main():
 
     # test_method(rounds, ["linear"], inputs, **params)
     # test_method(rounds, ["huber"], inputs, **params)
-    test_method(rounds, ["theilsen"], inputs, **params)
+    # test_method(rounds, ["theilsen"], inputs, **params)
     # test_method(rounds, ["par"], inputs, **params)
     # test_method(rounds, ["ridge_reg"], inputs, **params)
+    run(['theilsen', 'huber'], inputs, False, **params)
+
+    # test_method(rounds, ["huber", "ridge_reg"], inputs, **params)
+    # test_method(rounds, ["huber", "theilsen"], inputs, **params)
+
 
 if __name__ == '__main__':
     thread_pool = ThreadPoolExecutor(max_workers=4)
