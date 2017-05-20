@@ -209,7 +209,7 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
         2: is holiday. 0 or 1
     """
     if not path_to_weather==None:
-        weather_data = extract_weather(path_to_weather, "output_" + path_to_weather[-8:-1])
+        weather_data = extract_weather(path_to_weather, "output_weather_" + path_to_weather[29:])
         weather_times = weather_data[:,0]
 
     AV = 0
@@ -261,7 +261,7 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
     for day in all_days:
         idx = np.asscalar(np.searchsorted(all_days, day))
         invert_day_dict[day] = idx
-        volume_for_knn[:, :, idx, :, DOW+timestamp2day_of_week(day * 86400 - 3600 * 8)] = 1
+        volume_for_knn[:, :, idx, :, DOW+timestamp2day_of_week(day * 86400 - 3600 * 8)] = 1#one hot
         volume_for_knn[:, :, idx, :, HLD] = is_holiday(day * 86400 - 3600 * 8)
     invert_id_dict = {}
     for tollgate_id in all_ids:
@@ -281,14 +281,11 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
             if weather_idx >= np.size(weather_times):
                 continue
             weather_time = weather_times[weather_idx]
+
             if weather_time - start_time_window > 3 * 60 * 60:
                 # if the time gap is larger than 3 hours
                 continue
-            #print(weather_data)
-            # with open("fuck.txt") as f:
-            #     print(datetime.utcfromtimestamp(start_time_window).strftime("%Y-%m-%d %H:%M:%S.%f"),file=f)
-            #     print(weather_data[weather_idx,-1],file=f)
-            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WD] = weather_data[weather_idx,-1]
+            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WD] = rain_level(weather_data[weather_idx-1,-1])
 
     print(len(test))
     np.save(output_file, volume_for_knn)
