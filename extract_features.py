@@ -285,7 +285,7 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
             if weather_time - start_time_window > 3 * 60 * 60:
                 # if the time gap is larger than 3 hours
                 continue
-            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WD] = rain_level(weather_data[weather_idx-1,-1])
+            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WD] = rain_level(8*weather_data[weather_idx-1,-1])
 
     print(len(test))
     np.save(output_file, volume_for_knn)

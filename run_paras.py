@@ -194,6 +194,7 @@ def test_method(rounds, method_list, inputs, **kwargs):
     for i in range(rounds):
         mape_list.append(run(method_list, inputs, **kwargs))
     print("Average MAPE of %s = " % str(method_list), np.mean(mape_list))
+    return np.mean(mape_list)
 
 
 def main():
@@ -246,7 +247,15 @@ def main():
     # test_method(rounds, ["par"], inputs, **params)
     #test_method(rounds, ["theilsen"], inputs, **params)
     # test_method(rounds, ["ridge_reg"], inputs, **params)
-    test_method(rounds, ["ridge_reg", "linear","theilson"], inputs, **params)
+    best_mape = 100.0
+    for i in range(0,100):
+        print(i)
+        mape = test_method(rounds, ["theilson", "huber"], inputs, **params)
+        if(mape < best_mape):
+            best_mape = mape;
+            print("best_mape : " + str(best_mape))
+            run(["theilson", "huber"], inputs, False, **params)
+    #test_method(rounds, ["theilson", "huber"], inputs, **params)
     # test_method(rounds, ["dt_reg"], inputs, **params)
     # test_method(rounds, ["rf_reg"], inputs, **params)
 
