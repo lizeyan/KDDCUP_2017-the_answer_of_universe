@@ -1,18 +1,27 @@
 from functools import reduce
+import xgboost as xgb
 
 from extract_features import *
 from scipy.stats import *
 from sklearn import tree, ensemble, svm, linear_model, neural_network
-from concurrent.futures import *
-import time
+from concurrent.futures import ThreadPoolExecutor
 
 
-def get_bins(num_bins, flatten_arr):
+
+def get_bins_depth(num_bins, flatten_arr):
     assert 0 < num_bins < 100 and isinstance(num_bins, int) and 100 % num_bins is 0
     arr_bins = []
     for per in range(0, 101, int(100 / num_bins)):
         arr_bins.append(np.asscalar(np.percentile(flatten_arr, per)))
-    return arr_bins
+    return np.asarray(arr_bins)
+
+
+def get_bins_width(num_bins, flatten_arr):
+    assert 0 < num_bins < 100 and isinstance(num_bins, int)
+    arr_bins = []
+    minimum = np.min(flatten_arr)
+    maximum = np.max(flatten_arr)
+    return np.arange(start=minimum, stop=maximum+EPS, step=(maximum - minimum) / num_bins)
 
 
 def average_predict(train_result, test_list) -> np.ndarray:
@@ -32,86 +41,90 @@ def knn_predict(train_list, train_result, test_list, k=9) -> np.ndarray:
     return result
 
 
-
 def prepare_data(num_bins, **kwargs):
-    v_train, _, _ = extract_volume_knn("./training/volume(table 6)_training.csv", "volume_for_knn_train.npy",
-                                       "./training/weather (table 7)_training.csv", **kwargs)
+    v_train, _, _ = extract_volume_knn("./train/volume(table 6)_training.csv", "volume_for_knn_train.npy",
+                                       "./train/weather (table 7)_training.csv", **kwargs)
 
-    # print(v_train[0,0,0,:,:])
+    v_test, all_ids, all_days = extract_volume_knn("./test/volume(table 6)_test2.csv",
+                                                   "volume_for_knn_test.npy", "./test/weather (table 7)_2.csv", **kwargs)
 
-
-    v_test, all_ids, all_days = extract_volume_knn("./testing_phase1/volume(table 6)_test1.csv",
-                                                   "volume_for_knn_test.npy","./testing_phase1/weather (table 7)_test1.csv", **kwargs)
-
-    # log("Train data shape:", np.shape(v_train))
-    # log("Test data shape:", np.shape(v_test))
+    log("Train data shape:", np.shape(v_train))
+    log("Test data shape:", np.shape(v_test))
 
     AVERAGE_VOLUME = 0
-    DAY_OF_WEEK = 1
     all_volume = np.concatenate(
         [v_train[:, :, :, :, AVERAGE_VOLUME].flatten(), v_test[:, :, :, :, AVERAGE_VOLUME].flatten()])
-    volume_bins = get_bins(num_bins - 1, all_volume[all_volume > 0])
-    volume_bins = [0] + volume_bins
-    volume_predict = np.asarray(volume_bins.copy(), dtype=float)
-    volume_predict[:-1] = (volume_predict[:-1] + volume_predict[1:]) / 2
+    volume_bins = get_bins_depth(num_bins - 1, all_volume[all_volume > 0])
+    # volume_bins = get_bins_width(num_bins - 1, all_volume[all_volume > 0])
+    volume_bins = np.concatenate([[0], volume_bins])
+
+    log("volume bins", volume_bins)
+
+    # v_train[:, :, :, :, AVERAGE_VOLUME] = (v_train[:, :, :, :, AVERAGE_VOLUME] - np.mean(all_volume)) / np.std(all_volume)
+    # v_test[:, :, :, :, AVERAGE_VOLUME] = (v_test[:, :, :, :, AVERAGE_VOLUME] - np.mean(all_volume)) / np.std(all_volume)
 
     return v_train, v_test, all_ids, all_days, volume_bins
 
 
-
-def predict(_train_list, _train_result, _test_list, __method_list, **kwargs):
-    def fit_predict_each_output(__model, __target):
+def predict(train_list, train_result, test_list, method_list, **kwargs):
+    def fit_predict_each_output(model, target):
         __predict_result = []
-        for idx in range(np.size(__target, 1)):
-            __model.fit(_train_list, __target[:, idx])
-            __predict_result.append(__model.predict(_test_list))
+        for idx in range(np.size(target, 1)):
+            model.fit(train_list, target[:, idx])
+            __predict_result.append(model.predict(test_list))
         return np.transpose(np.asarray(__predict_result))
 
-    def fit_predict(__model, __target):
-        __model.fit(_train_list, __target)
-        return __model.predict(_test_list)
+    def fit_predict(model, target):
+        model.fit(train_list, target)
+        return model.predict(test_list)
 
     from_bins_idx = kwargs["from_bins_idx"]
     to_bins_idx = kwargs["to_bins_idx"]
-    _binned_train_result = to_bins_idx(_train_result)
+    _binned_train_result = to_bins_idx(train_result)
 
     _predict_result = []
-    if "knn" in __method_list:
-        _ = knn_predict(_train_list, _binned_train_result, _test_list, k=kwargs["k"])
+    if "knn" in method_list:
+        _ = knn_predict(train_list, _binned_train_result, test_list, k=kwargs["k"])
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
-    elif "dt" in __method_list:
+    elif "dt" in method_list:
         _ = fit_predict(tree.DecisionTreeClassifier(max_depth=kwargs["max_depth"]), _binned_train_result)
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
-    elif "rf" in __method_list:
+    elif "rf" in method_list:
         _ = fit_predict(ensemble.RandomForestClassifier(n_estimators=kwargs["n_estimators"], max_depth=kwargs["max_depth"], n_jobs=kwargs["n_jobs"]), _binned_train_result)
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
-    elif "average" in __method_list:
-        _ = average_predict(_train_result, _test_list)
+    elif "average" in method_list:
+        _ = average_predict(train_result, test_list)
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
-    elif "adaboost" in __method_list:
+    elif "adaboost" in method_list:
         _ = fit_predict_each_output(ensemble.AdaBoostClassifier(), _binned_train_result)
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
-    elif "ridge" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.RidgeClassifier()))
-		
-    elif "linear" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.LinearRegression()))
-        # return np.asarray(_predict_result)
-    elif "huber" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.HuberRegressor()))
-        # return np.asarray(_predict_result)
-    elif "theilsen" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.TheilSenRegressor()))
-        # return np.asarray(_predict_result)
-    elif "lasso" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.Lasso()))
-        # return np.asarray(_predict_result)
-    elif "par" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.PassiveAggressiveRegressor()))
-        # return np.asarray(_predict_result)
-    elif "ridge_reg" in __method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.Ridge()))
-        # return np.asarray(_predict_result)
+    elif "ridge" in method_list:
+        _ = fit_predict_each_output(linear_model.RidgeClassifier(), _binned_train_result)
+        _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
+    elif "linear" in method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.LinearRegression(), train_result))
+    elif "huber" in method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.HuberRegressor(), train_result))
+    elif "theilsen" in method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.TheilSenRegressor(), train_result))
+    elif "lasso" in method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.Lasso(), train_result))
+    elif "par" in method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.PassiveAggressiveRegressor(), train_result))
+    elif "ridge_reg" in method_list:
+        _predict_result.append(fit_predict_each_output(linear_model.Ridge(), train_result))
+    elif "dt_reg" in method_list:
+        _predict_result.append(fit_predict(tree.DecisionTreeRegressor(max_depth=kwargs["max_depth"]), train_result))
+    elif "rf_reg" in method_list:
+        _predict_result.append(fit_predict(ensemble.RandomForestRegressor(max_depth=kwargs["max_depth"], n_jobs=kwargs['n_jobs'], n_estimators=kwargs['n_estimators']), train_result))
+    elif "xgboost" in method_list:
+        _predict_result.append(fit_predict_each_output(xgb.XGBClassifier(max_depth=kwargs["max_depth"], n_estimators=kwargs['n_estimators'], nthread=kwargs["nthread"]), _binned_train_result))
+    elif "xgboost_reg" in method_list:
+        _predict_result.append(fit_predict_each_output(xgb.XGBRegressor(max_depth=kwargs["max_depth"], n_estimators=kwargs['n_estimators'], nthread=kwargs["nthread"]), train_result))
+    elif "svr" in method_list:
+        _predict_result.append(fit_predict_each_output(svm.SVR(C=kwargs["C"], epsilon=kwargs["epsilon"]), train_result))
+    elif "linear_svr" in method_list:
+        _predict_result.append(fit_predict_each_output(svm.LinearSVR(C=kwargs["C"], epsilon=kwargs["epsilon"]), train_result))
     else:
         assert False, "invalid method"
     return np.asarray(_predict_result)
@@ -132,7 +145,6 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
     REQUIRED_TW = inputs["required_tw"]
 
     if cross_validate:  # cross validate
-        #print("cross")
         rst_sum, rst_count = 0, 0
         train_day_idx_partition = int(np.size(v_train, 2) / fold)
         day_idx = np.arange(0, np.size(v_train, 2))
@@ -194,30 +206,33 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
         test_output_file.close()
 
 
-def test_method(rounds, method_list, inputs, **kwargs):
-    mape_list = []
-    for i in range(rounds):
-        mape_list.append(run(method_list, inputs, **kwargs))
-        # if i % 5 == 0:
-        print("finished rounds: ", i)
-        time.sleep(15)
-    print("Average MAPE of %s = " % str(method_list), np.mean(mape_list))
+def test_method(rounds, method_list, inputs, parallel=False, **kwargs):
+    if parallel:
+        future_list = []
+        for i in range(rounds):
+            future_list.append(executor.submit(run, method_list, inputs, **kwargs))
+        mape_list = list([item.result() for item in future_list])
+    else:
+        mape_list = list([run(method_list, inputs, **kwargs) for i in range(rounds)])
+    log("Average MAPE of %s = " % str(method_list), np.mean(mape_list))
 
 
 def main():
-    rounds = 5
-    num_bin = 26
+    rounds = 100
+    num_bin = 51
     params = {
         "k": 7,
         "max_depth": 4,
         "n_estimators": 100,
-        "n_jobs": 8
+        "n_jobs": 4,
+        "nthread": 4,
+        "C": 1.0,  # SVR
+        "epsilon": 0.1  # SVR
     }
-    tw_seconds = 60
+    tw_seconds = 60 * 10
 
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds,
                                                                    refresh=False)
-
 
     def from_bins_idx(arr):
         return np.vectorize(volume_bins.__getitem__)(arr)
@@ -238,35 +253,39 @@ def main():
         "time_window_seconds": tw_seconds,
     }
 
-    # test_method(rounds, ["knn"], inputs, **params)
-    # test_method(rounds, ["dt"], inputs, **params)
+    test_method(rounds, ["knn"], inputs, **params)
+    test_method(rounds, ["svr"], inputs, **params)
+    test_method(rounds, ["linear_svr"], inputs, **params)
+    test_method(rounds, ["dt"], inputs, **params)
     # test_method(rounds, ["rf"], inputs, **params)
     # test_method(rounds, ["average"], inputs, **params)
     # test_method(rounds, ["adaboost"], inputs, **params)
-    # test_method(rounds, ["ridge"], inputs, **params)
-    # test_method(rounds, ["linear"], inputs, **params)
+    test_method(rounds, ["ridge"], inputs, **params)
+    test_method(rounds, ["linear"], inputs, **params)
     # test_method(rounds, ["huber"], inputs, **params)
-
-    #test_method(rounds, ["theilsen"], inputs, **params)
-
     # test_method(rounds, ["lasso"], inputs, **params)
-
-    # test_method(rounds, ["par"], inputs, **params)
-    #test_method(rounds, ["theilsen"], inputs, **params)
-    # test_method(rounds, ["ridge_reg"], inputs, **params)
-    run(['theilsen', 'huber'], inputs, False, **params)
-
-    # test_method(rounds, ["huber", "ridge_reg"], inputs, **params)
-    # test_method(rounds, ["huber", "theilsen"], inputs, **params)
-    test_method(rounds, ["ridge_reg", "linear","theilson"], inputs, **params)
-    # test_method(rounds, ["dt_reg"], inputs, **params)
+    test_method(rounds, ["par"], inputs, **params)
+    test_method(rounds, ["theilsen"], inputs, parallel=False, **params)
+    test_method(rounds, ["ridge_reg"], inputs, **params)
+    test_method(rounds, ["ridge_reg", "linear_svr"], inputs, **params)
+    test_method(rounds, ["par", "linear_svr"], inputs, **params)
+    # test_method(rounds, ["xgboost"], inputs, **params)
+    # test_method(rounds, ["xgboost_reg"], inputs, **params)
+    # test_method(rounds, ["ridge_reg", "linear", "theilson"], inputs, **params)
+    test_method(rounds, ["dt_reg"], inputs, **params)
     # test_method(rounds, ["rf_reg"], inputs, **params)
 
-    # run(["theilsen"], inputs, False, **params)
+    # run(["ridge_reg", "linear_svr"], inputs, False, **params)
+    # run(["dt"], inputs, False, **params)
+    # run(["ridge_reg"], inputs, False, **params)
+    # run(["par"], inputs, False, **params)
+    # run(["knn"], inputs, False, **params)
+    # run(["knn", "dt"], inputs, False, **params)
+    run(["par", "linear_svr"], inputs, False, **params)
 
 
 
 if __name__ == '__main__':
-    thread_pool = ThreadPoolExecutor(max_workers=4)
     EPS = 1e-8
-    main()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        main()

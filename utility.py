@@ -5,7 +5,6 @@ from matplotlib import pyplot as plt
 import numpy as np
 import os
 
-
 holiday_set = {17059, 17060, 17061, 17075, 17076, 17077, 17078, 17079, 17080, 17081}
 
 
@@ -16,7 +15,7 @@ def log(*args):
     print(display_now, *args)
 
 
-def last_timewindow(timestamp, timewindow=20*60) -> int:
+def last_timewindow(timestamp, timewindow=20 * 60) -> int:
     return timestamp - timewindow
 
 
@@ -85,14 +84,22 @@ def clean_dir(path):
         shutil.rmtree(path)
     os.makedirs(path)
 
+
 def rain_level(precipitation):
-    if(precipitation == 0):
+    if precipitation == 0:
         return 0
-    elif(precipitation < 990):
+    elif precipitation < 990:
         return 1
-    elif(precipitation < 2490):
+    elif precipitation < 2490:
         return 2
-    elif(precipitation < 4990):
+    elif precipitation < 4990:
         return 3
     else:
         return 4
+
+
+def rstrip_str(s: str, rend: str):
+    if s.endswith(rend):
+        return s[:-len(rend)]
+    else:
+        return s
