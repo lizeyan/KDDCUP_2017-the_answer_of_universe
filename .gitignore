@@ -8,3 +8,4 @@ volume_output*.csv
 output_weather.csv
 __pycache__/
 *.pickle
+test.py

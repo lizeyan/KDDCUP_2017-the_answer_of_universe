@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pylab as pl
 
 
+
 def get_bins_depth(num_bins, flatten_arr):
     assert 0 < num_bins < 100 and isinstance(num_bins, int) and 100 % num_bins is 0
     arr_bins = []
@@ -128,6 +129,8 @@ def predict(train_list, train_result, test_list, method_list, **kwargs):
     else:
         assert False, "invalid method"
     return np.asarray(_predict_result)
+    # return from_bins_idx(np.asarray(_predict_result, dtype=int))
+
 
 
 def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
@@ -282,6 +285,7 @@ def main():
     # run(["knn"], inputs, False, **params)
     # run(["knn", "dt"], inputs, False, **params)
     run(["par", "linear_svr"], inputs, False, **params)
+
 
 
 if __name__ == '__main__':
