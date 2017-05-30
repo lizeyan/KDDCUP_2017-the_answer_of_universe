@@ -3,10 +3,8 @@ import xgboost as xgb
 
 from extract_features import *
 from scipy.stats import *
-from sklearn import tree, ensemble, svm, linear_model, neural_network
+from sklearn import tree, ensemble, svm, linear_model, neural_network, pipeline
 from concurrent.futures import ThreadPoolExecutor
-import pylab as pl
-
 
 
 def get_bins_depth(num_bins, flatten_arr):
@@ -19,7 +17,6 @@ def get_bins_depth(num_bins, flatten_arr):
 
 def get_bins_width(num_bins, flatten_arr):
     assert 0 < num_bins < 100 and isinstance(num_bins, int)
-    arr_bins = []
     minimum = np.min(flatten_arr)
     maximum = np.max(flatten_arr)
     return np.arange(start=minimum, stop=maximum+EPS, step=(maximum - minimum) / num_bins)
@@ -84,7 +81,12 @@ def predict(train_list, train_result, test_list, method_list, **kwargs):
     _binned_train_result = to_bins_idx(train_result)
 
     _predict_result = []
-    if "knn" in method_list:
+    if "current" in method_list:
+        rbm = neural_network.BernoulliRBM(verbose=True)
+        svr = svm.LinearSVR()
+        model = pipeline.Pipeline([('rbm', rbm), ("svr", svr)])
+        _predict_result.append(fit_predict_each_output(model, train_result))
+    elif "knn" in method_list:
         _ = knn_predict(train_list, _binned_train_result, test_list, k=kwargs["k"])
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
     elif "dt" in method_list:
@@ -129,8 +131,6 @@ def predict(train_list, train_result, test_list, method_list, **kwargs):
     else:
         assert False, "invalid method"
     return np.asarray(_predict_result)
-    # return from_bins_idx(np.asarray(_predict_result, dtype=int))
-
 
 
 def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
@@ -205,7 +205,6 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
         test_output_file.close()
 
 
-
 def test_method(rounds, method_list, inputs, parallel=False, **kwargs):
     if parallel:
         future_list = []
@@ -233,8 +232,6 @@ def main():
 
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds,
                                                                    refresh=False)
-    print(v_train[0,0,:])
-
 
     def from_bins_idx(arr):
         return np.vectorize(volume_bins.__getitem__)(arr)
@@ -270,8 +267,8 @@ def main():
     # test_method(rounds, ["theilsen"], inputs, parallel=False, **params)
     # test_method(rounds, ["ridge_reg"], inputs, **params)
     # test_method(rounds, ["ridge_reg", "linear_svr"], inputs, **params)
-    for i in range(0,10):
-        test_method(rounds, ["par", "linear_svr"], inputs, **params)
+    test_method(rounds, ["par", "linear_svr"], inputs, **params)
+    test_method(rounds, ["current"], inputs, **params)
     # test_method(rounds, ["xgboost"], inputs, **params)
     # test_method(rounds, ["xgboost_reg"], inputs, **params)
     # test_method(rounds, ["ridge_reg", "linear", "theilson"], inputs, **params)
@@ -284,8 +281,7 @@ def main():
     # run(["par"], inputs, False, **params)
     # run(["knn"], inputs, False, **params)
     # run(["knn", "dt"], inputs, False, **params)
-    run(["par", "linear_svr"], inputs, False, **params)
-
+    # run(["par", "linear_svr"], inputs, False, **params)
 
 
 if __name__ == '__main__':

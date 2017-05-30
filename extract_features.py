@@ -296,72 +296,71 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None, time_win
     #         av_for_t_d = 0
     #         for day in all_days:
 
-
-    for tollgate_id in all_ids:
-        id_index = invert_id_dict[tollgate_id]
-        for direction in range(direction_count):
-            for day in all_days:
-                day_index = invert_day_dict[day]
-                x = volume_for_knn[id_index, direction, day_index, :, AV]  # 当天所有时间窗的AV序列（1*144向量）
-                av_for_day = np.mean(x)
-                print(av_for_day)
-                # 方法1：用全天的平均流量填充AV=0的时间窗
-                # for time_windows_index in range(time_windows_count):
-                #     if volume_for_knn[id_index, direction, day_index, time_windows_index, AV] == 0:
-                #         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_for_day
-
-                # 方法1.2：用更细粒度的平均流量来填充AV=0的时间窗
-                clk_6_index = int(time_windows_count / 4)
-                clk_12_index = int(time_windows_count / 2)
-                clk_18_index = int(time_windows_count * 3 / 4)
-                av_before_dawn = np.mean(x[0:clk_6_index+1])
-                av_morning = np.mean(x[clk_6_index:clk_12_index+1])
-                av_afternoon = np.mean(x[clk_12_index:clk_18_index+1])
-                av_evening = np.mean(x[clk_18_index:])
-                for time_windows_index in range(time_windows_count):
-                    if volume_for_knn[id_index, direction, day_index, time_windows_index, AV] == 0:
-                        if time_windows_index < clk_6_index:
-                            volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_before_dawn
-                        elif time_windows_index < clk_12_index:
-                            volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_morning
-                        elif time_windows_index < clk_18_index:
-                            volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_afternoon
-                        else:
-                            volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_evening
-
-
-
-                # 方法2：用Magic_number填充AV=0的时间窗
-                # magic_number = 3
-                # for time_windows_index in range(time_windows_count):
-                #     if volume_for_knn[id_index, direction, day_index, time_windows_index, AV] == 0:
-                #         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += magic_number
-
-
-                # # 方法3：用前后时间窗的平均流量填充AV=0的时间窗
-                # if int(av_for_day) == 0:
-                #     for time_windows_index in range(time_windows_count):
-                #         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] = 1
-                # else:
-                #     front_index = -1
-                #     for i in range(time_windows_count):
-                #         if volume_for_knn[id_index, direction, day_index, i, AV] != 0:
-                #             if front_index == -1:
-                #                 front_index += (1 + i)
-                #                 for j in range(0, front_index):
-                #                     volume_for_knn[id_index, direction, day_index, j, AV] = \
-                #                         volume_for_knn[id_index, direction, day_index, front_index, AV] / 2
-                #             else:
-                #                 next_index = i
-                #                 avg = (volume_for_knn[id_index, direction, day_index, front_index, AV]
-                #                        + volume_for_knn[id_index, direction, day_index, next_index, AV]) / 2
-                #                 for j in range(front_index + 1, next_index):
-                #                     volume_for_knn[id_index, direction, day_index, j, AV] += avg
-                #                 front_index = next_index
-                #         elif i == time_windows_count - 1:
-                #             for j in range(time_windows_count - 1, front_index, -1):
-                #                 volume_for_knn[id_index, direction, day_index, j, AV] = \
-                #                     volume_for_knn[id_index, direction, day_index, front_index, AV] / 2
+    # for tollgate_id in all_ids:
+    #     id_index = invert_id_dict[tollgate_id]
+    #     for direction in range(direction_count):
+    #         for day in all_days:
+    #             day_index = invert_day_dict[day]
+    #             x = volume_for_knn[id_index, direction, day_index, :, AV]  # 当天所有时间窗的AV序列（1*144向量）
+    #             av_for_day = np.mean(x)
+    #             print(av_for_day)
+    #             # 方法1：用全天的平均流量填充AV=0的时间窗
+    #             # for time_windows_index in range(time_windows_count):
+    #             #     if volume_for_knn[id_index, direction, day_index, time_windows_index, AV] == 0:
+    #             #         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_for_day
+    #
+    #             # 方法1.2：用更细粒度的平均流量来填充AV=0的时间窗
+    #             clk_6_index = int(time_windows_count / 4)
+    #             clk_12_index = int(time_windows_count / 2)
+    #             clk_18_index = int(time_windows_count * 3 / 4)
+    #             av_before_dawn = np.mean(x[0:clk_6_index+1])
+    #             av_morning = np.mean(x[clk_6_index:clk_12_index+1])
+    #             av_afternoon = np.mean(x[clk_12_index:clk_18_index+1])
+    #             av_evening = np.mean(x[clk_18_index:])
+    #             for time_windows_index in range(time_windows_count):
+    #                 if volume_for_knn[id_index, direction, day_index, time_windows_index, AV] == 0:
+    #                     if time_windows_index < clk_6_index:
+    #                         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_before_dawn
+    #                     elif time_windows_index < clk_12_index:
+    #                         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_morning
+    #                     elif time_windows_index < clk_18_index:
+    #                         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_afternoon
+    #                     else:
+    #                         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += av_evening
+    #
+    #
+    #
+    #             # 方法2：用Magic_number填充AV=0的时间窗
+    #             # magic_number = 3
+    #             # for time_windows_index in range(time_windows_count):
+    #             #     if volume_for_knn[id_index, direction, day_index, time_windows_index, AV] == 0:
+    #             #         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] += magic_number
+    #
+    #
+    #             # # 方法3：用前后时间窗的平均流量填充AV=0的时间窗
+    #             # if int(av_for_day) == 0:
+    #             #     for time_windows_index in range(time_windows_count):
+    #             #         volume_for_knn[id_index, direction, day_index, time_windows_index, AV] = 1
+    #             # else:
+    #             #     front_index = -1
+    #             #     for i in range(time_windows_count):
+    #             #         if volume_for_knn[id_index, direction, day_index, i, AV] != 0:
+    #             #             if front_index == -1:
+    #             #                 front_index += (1 + i)
+    #             #                 for j in range(0, front_index):
+    #             #                     volume_for_knn[id_index, direction, day_index, j, AV] = \
+    #             #                         volume_for_knn[id_index, direction, day_index, front_index, AV] / 2
+    #             #             else:
+    #             #                 next_index = i
+    #             #                 avg = (volume_for_knn[id_index, direction, day_index, front_index, AV]
+    #             #                        + volume_for_knn[id_index, direction, day_index, next_index, AV]) / 2
+    #             #                 for j in range(front_index + 1, next_index):
+    #             #                     volume_for_knn[id_index, direction, day_index, j, AV] += avg
+    #             #                 front_index = next_index
+    #             #         elif i == time_windows_count - 1:
+    #             #             for j in range(time_windows_count - 1, front_index, -1):
+    #             #                 volume_for_knn[id_index, direction, day_index, j, AV] = \
+    #             #                     volume_for_knn[id_index, direction, day_index, front_index, AV] / 2
 
 
 
