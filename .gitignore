@@ -1,10 +1,10 @@
 testing_phase1/
-training/
 *.data
 *.npy
 *.pdf
 .idea/
-*.csv
 pic/
+volume_output*.csv
+output_weather.csv
 __pycache__/
 *.pickle

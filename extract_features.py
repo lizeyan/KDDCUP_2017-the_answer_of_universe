@@ -68,7 +68,7 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
                         last_time_window = last_timewindow(time_window, 20 * 60)
                         if last_time_window not in each_tollgate_direction:
                             continue
-                        weather_idx = np.searchsorted(weather_times, last_time_window)
+                        weather_idx = np.searchsorted(weather_times, (last_time_window,))
                         if weather_idx >= np.size(weather_times):
                             continue
                         weather_time = weather_times[weather_idx]
@@ -123,7 +123,7 @@ def extract_travel_time_naive(path_to_file, output_file, volume_data):
 
             trace_start_time = each_traj[3]
             trace_start_time = datetime.strptime(trace_start_time, "%Y-%m-%d %H:%M:%S")
-            time_window_minute = np.math.floor(trace_start_time.minute / 20) * 20
+            time_window_minute = int(np.math.floor(trace_start_time.minute / 20) * 20)
             start_time_window = datetime(trace_start_time.year, trace_start_time.month, trace_start_time.day,
                                          trace_start_time.hour, time_window_minute, 0)
             start_time_window = start_time_window.timestamp()
@@ -148,9 +148,9 @@ def extract_travel_time_naive(path_to_file, output_file, volume_data):
                         continue
                     volume, ps, sps, wd, ws, tp, rh, pp = volume_data[volume_idx, 3:11]
                     tt_set = np.asarray(each_route[time_window_start]).astype(float)
-                    avg_tt = int(np.mean(tt_set) * 100)
+                    avg_tt = int(np.asscalar(np.mean(tt_set) * 100))
                     tt_set_last = np.asarray(each_route[last_time_window]).astype(float)
-                    avg_tt_last = int(np.mean(tt_set_last) * 100)
+                    avg_tt_last = int(np.asscalar(np.mean(tt_set_last) * 100))
                     intersection_id, tollgate_id = route.split('-')
                     intersection_id = ord(intersection_id)
                     print("%s %s %d %d %d %d %d %d %d %d %d %d %d" % (
@@ -196,8 +196,7 @@ def extract_weather(path_to_file, output_file) -> np.ndarray:
     return np.loadtxt(output_file)
 
 
-
-def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_window_seconds=1200, refresh=False):
+def extract_volume_knn(path_to_file, output_file, path_to_weather=None, time_window_seconds=1200, refresh=False):
     """
     0 axis: tollgate
     1 axis: direction
@@ -205,24 +204,28 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
     3 axis: time windows of 20 minute
     4 axis: features
         0: average volume. 0 by default
-        1: day of week. 0 by default
-        2: is holiday. 0 or 1
+        1-7: day of week. 0 by default
+        8: is holiday. 0 or 1
+        9: weather
     """
-    if not path_to_weather==None:
-        weather_data = extract_weather(path_to_weather, "output_weather_" + path_to_weather[29:])
-        weather_times = weather_data[:,0]
+    if path_to_weather is not None:
+        weather_data = extract_weather(path_to_weather, "output_weather.csv")
+        weather_times = weather_data[:, 0]
 
     AV = 0
     DOW = 1
     HLD = 8
-    WD = 9
-    features_count = 10
+    WS = 9
+    RH = 10
+    features_count = 11
     assert time_window_seconds % 60 == 0
     time_window_minutes = int(time_window_seconds / 60)
     assert 60 % time_window_minutes == 0 and 60 / time_window_minutes >= 1
     if os.path.exists(output_file) and not refresh:
-        all_ids = pickle.load(open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "rb"))
-        all_days = pickle.load(open("%s_all_days.pickle" % output_file.rstrip(".npy"), "rb"))
+        with open("%s_all_ids.pickle" % rstrip_str(output_file, ".npy"), "rb") as f:
+            all_ids = pickle.load(f)
+        with open("%s_all_days.pickle" % rstrip_str(output_file, ".npy"), "rb") as f:
+            all_days = pickle.load(f)
         return np.load(output_file), all_ids, all_days
     with open(path_to_file, 'r') as fin:
         fin.readline()
@@ -253,10 +256,8 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
     time_windows_count = int(86400 / time_window_seconds)
     shape = (tollgate_id_count, direction_count, day_count, time_windows_count, features_count)
     log("shape of raw volume data:", shape)
-    volume_for_knn = np.zeros(shape=shape, dtype=int)
+    volume_for_knn = np.zeros(shape=shape, dtype=float)
     invert_day_dict = {}
-
-
 
     for day in all_days:
         idx = np.asscalar(np.searchsorted(all_days, day))
@@ -275,7 +276,7 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
         test.add((time_windows_index + 1))
         volume_for_knn[id_index, entry[1], day_index, time_windows_index, AV] += 1
 
-        if not path_to_weather == None:
+        if path_to_weather is not None:
             start_time_window = entry[-1]
             weather_idx = np.searchsorted(weather_times,start_time_window)
             if weather_idx >= np.size(weather_times):
@@ -285,12 +286,12 @@ def extract_volume_knn(path_to_file, output_file, path_to_weather=None,time_wind
             if weather_time - start_time_window > 3 * 60 * 60:
                 # if the time gap is larger than 3 hours
                 continue
-            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WD] = rain_level(8*weather_data[weather_idx-1,-1])
+            volume_for_knn[id_index, entry[1], day_index, time_windows_index, WS] = float(weather_data[weather_idx-1,4]/float(500.0))
+            volume_for_knn[id_index, entry[1], day_index, time_windows_index, RH] = float(weather_data[weather_idx-1,-2]/float(1000.0))
 
-    print(len(test))
     np.save(output_file, volume_for_knn)
-    pickle.dump(all_ids, file=open("%s_all_ids.pickle" % output_file.rstrip(".npy"), "wb+"))
-    pickle.dump(all_days, file=open("%s_all_days.pickle" % output_file.rstrip(".npy"), "wb+"))
+    pickle.dump(all_ids, file=open("%s_all_ids.pickle" % rstrip_str(output_file, ".npy"), "wb+"))
+    pickle.dump(all_days, file=open("%s_all_days.pickle" % rstrip_str(output_file, ".npy"), "wb+"))
     return volume_for_knn, all_ids, all_days
 
 
