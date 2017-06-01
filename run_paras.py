@@ -52,8 +52,8 @@ def prepare_data(num_bins, **kwargs):
     AVERAGE_VOLUME = 0
     all_volume = np.concatenate(
         [v_train[:, :, :, :, AVERAGE_VOLUME].flatten(), v_test[:, :, :, :, AVERAGE_VOLUME].flatten()])
-    volume_bins = get_bins_depth(num_bins - 1, all_volume[all_volume > 0])
-    # volume_bins = get_bins_width(num_bins - 1, all_volume[all_volume > 0])
+    # volume_bins = get_bins_depth(num_bins - 1, all_volume[all_volume > 0])
+    volume_bins = get_bins_width(num_bins - 1, all_volume[all_volume > 0])
     volume_bins = np.concatenate([[0], volume_bins])
 
     log("volume bins", volume_bins)
@@ -82,10 +82,15 @@ def predict(train_list, train_result, test_list, method_list, **kwargs):
 
     _predict_result = []
     if "current" in method_list:
-        rbm = neural_network.BernoulliRBM(verbose=True)
-        svr = svm.LinearSVR()
-        model = pipeline.Pipeline([('rbm', rbm), ("svr", svr)])
-        _predict_result.append(fit_predict_each_output(model, train_result))
+        rbm = neural_network.BernoulliRBM(n_components=512, verbose=False, n_iter=100, learning_rate=1e-2, random_state=0)
+        rbm.fit(train_list)
+        rbm.fit(test_list)
+        __predict_result = []
+        svr = svm.LinearSVR(C=kwargs["C"], epsilon=kwargs["epsilon"])
+        for idx in range(np.size(train_result, 1)):
+            svr.fit(rbm.transform(train_list), train_result[:, idx])
+            __predict_result.append(svr.predict(rbm.transform(test_list)))
+        _predict_result.append(np.transpose(np.asarray(__predict_result)))
     elif "knn" in method_list:
         _ = knn_predict(train_list, _binned_train_result, test_list, k=kwargs["k"])
         _predict_result.append(from_bins_idx(np.asarray(_, dtype=int)))
@@ -113,7 +118,7 @@ def predict(train_list, train_result, test_list, method_list, **kwargs):
     elif "lasso" in method_list:
         _predict_result.append(fit_predict_each_output(linear_model.Lasso(), train_result))
     elif "par" in method_list:
-        _predict_result.append(fit_predict_each_output(linear_model.PassiveAggressiveRegressor(), train_result))
+        _predict_result.append(fit_predict_each_output(linear_model.PassiveAggressiveRegressor(C=kwargs["par_C"], epsilon=kwargs["par_eps"]), train_result))
     elif "ridge_reg" in method_list:
         _predict_result.append(fit_predict_each_output(linear_model.Ridge(), train_result))
     elif "dt_reg" in method_list:
@@ -148,31 +153,30 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
         rst_sum, rst_count = 0, 0
         train_day_idx_partition = int(np.size(v_train, 2) / fold)
         day_idx = np.arange(0, np.size(v_train, 2))
-        np.random.shuffle(day_idx)
-        day_idx_test, day_idx_train = day_idx[:train_day_idx_partition], day_idx[train_day_idx_partition:]
+        # np.random.shuffle(day_idx)
+        day_idx_test, day_idx_train = day_idx[-train_day_idx_partition:], day_idx[:-train_day_idx_partition]
         for tollgate_id in range(np.size(v_train, 0)):
             for direction in range(np.size(v_train, 1)):
-                i_tw = reduce(lambda x, y: x + y, INPUT_TW)
-                r_tw = reduce(lambda x, y: x + y, REQUIRED_TW)
-                _train = v_train[tollgate_id, direction, day_idx_train, :, :]
-                _test = v_train[tollgate_id, direction, day_idx_test, :, :]
+                for i_tw, r_tw in zip(INPUT_TW, REQUIRED_TW):
+                    _train = v_train[tollgate_id, direction, day_idx_train, :, :]
+                    _test = v_train[tollgate_id, direction, day_idx_test, :, :]
 
-                _train_list = np.concatenate([_train[:, i_tw, 0], _train[:, 0, 1:]], axis=1)
-                _train_result = _train[:, r_tw, 0]
-                _test_list = np.concatenate([_test[:, i_tw, 0], _test[:, 0, 1:]], axis=1)
+                    _train_list = np.concatenate([_train[:, i_tw, 0], _train[:, 0, 1:]], axis=1)
+                    _train_result = _train[:, r_tw, 0]
+                    _test_list = np.concatenate([_test[:, i_tw, 0], _test[:, 0, 1:]], axis=1)
 
-                _test_result = _test[:, r_tw, 0]
-                _test_result = sum_tws(_test_result, inputs["num_sum"])
+                    _test_result = _test[:, r_tw, 0]
+                    _test_result = sum_tws(_test_result, inputs["num_sum"])
 
-                _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx, to_bins_idx=to_bins_idx)
-                _predict_result = np.mean(_predict_result, axis=0)
-                _predict_result = sum_tws(_predict_result, inputs["num_sum"])
-                rst_count += np.size(_predict_result)
-                with np.errstate(divide='ignore', invalid='ignore'):
-                    diff = np.abs(_predict_result[_test_result != 0] - _test_result[_test_result != 0])
-                    fraction = diff / (_test_result[_test_result != 0] + np.asarray((EPS,)))
-                    fraction[diff == 0] = 0
-                    rst_sum += np.sum(fraction)
+                    _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx, to_bins_idx=to_bins_idx)
+                    _predict_result = np.mean(_predict_result, axis=0)
+                    _predict_result = sum_tws(_predict_result, inputs["num_sum"])
+                    rst_count += np.size(_predict_result)
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        diff = np.abs(_predict_result[_test_result != 0] - _test_result[_test_result != 0])
+                        fraction = diff / (_test_result[_test_result != 0] + np.asarray((EPS,)))
+                        fraction[diff == 0] = 0
+                        rst_sum += np.sum(fraction)
         mape = rst_sum / rst_count
         return mape
     else:  # test
@@ -182,26 +186,25 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
         p = None
         for tollgate_id in range(np.size(v_train, 0)):
             for direction in range(np.size(v_train, 1)):
-                i_tw = reduce(lambda x, y: x + y, INPUT_TW)
-                r_tw = reduce(lambda x, y: x + y, REQUIRED_TW)
-                _train = v_train[tollgate_id, direction, :, :, :]
-                _test = v_test[tollgate_id, direction, :, :, :]
+                for i_tw, r_tw in zip(INPUT_TW, REQUIRED_TW):
+                    _train = v_train[tollgate_id, direction, :, :, :]
+                    _test = v_test[tollgate_id, direction, :, :, :]
 
-                _train_list = np.concatenate([_train[:, i_tw, 0], _train[:, 0, 1:]], axis=1)
-                _train_result = _train[:, r_tw, 0]
-                _test_list = np.concatenate([_test[:, i_tw, 0], _test[:, 0, 1:]], axis=1)
+                    _train_list = np.concatenate([_train[:, i_tw, 0], _train[:, 0, 1:]], axis=1)
+                    _train_result = _train[:, r_tw, 0]
+                    _test_list = np.concatenate([_test[:, i_tw, 0], _test[:, 0, 1:]], axis=1)
 
-                _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx, to_bins_idx=to_bins_idx)
-                _predict_result = np.mean(_predict_result, axis=0)
-                _predict_result = sum_tws(_predict_result, inputs["num_sum"])
-                for day in range(np.size(v_test, 2)):
-                    for idx in range(0, len(r_tw), inputs["num_sum"]):
-                        tw = r_tw[idx]
-                        timestamp = int(all_days[day]) * 86400 - 3600 * 8 + tw_seconds * tw
-                        print("%s,\"[%s,%s)\",%s,%f" % (
-                            all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "),
-                            datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction,
-                            np.asscalar(_predict_result[day, int(idx / inputs["num_sum"])])), file=test_output_file)
+                    _predict_result = predict(_train_list, _train_result, _test_list, method_list, **kwargs, from_bins_idx=from_bins_idx, to_bins_idx=to_bins_idx)
+                    _predict_result = np.mean(_predict_result, axis=0)
+                    _predict_result = sum_tws(_predict_result, inputs["num_sum"])
+                    for day in range(np.size(v_test, 2)):
+                        for idx in range(0, len(r_tw), inputs["num_sum"]):
+                            tw = r_tw[idx]
+                            timestamp = int(all_days[day]) * 86400 - 3600 * 8 + tw_seconds * tw
+                            print("%s,\"[%s,%s)\",%s,%f" % (
+                                all_ids[tollgate_id], datetime.fromtimestamp(timestamp).isoformat(" "),
+                                datetime.fromtimestamp(timestamp + 1200).isoformat(" "), direction,
+                                np.asscalar(_predict_result[day, int(idx / inputs["num_sum"])])), file=test_output_file)
         test_output_file.close()
 
 
@@ -217,18 +220,20 @@ def test_method(rounds, method_list, inputs, parallel=False, **kwargs):
 
 
 def main():
-    rounds = 100
-    num_bin = 51
+    rounds = 1
+    num_bin = 26
     params = {
         "k": 7,
-        "max_depth": 4,
-        "n_estimators": 100,
+        "max_depth": 5,
+        "n_estimators": 10000,
         "n_jobs": 4,
         "nthread": 4,
-        "C": 1.0,  # SVR
-        "epsilon": 0.1  # SVR
+        "C": 0.1,  # SVR
+        "epsilon": 0,  # SVR
+        "par_C": 1.0,
+        "par_eps": 0.01,
     }
-    tw_seconds = 60 * 10
+    tw_seconds = 60 * 2
 
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds,
                                                                    refresh=False)
@@ -257,6 +262,13 @@ def main():
     # test_method(rounds, ["linear_svr"], inputs, **params)
     # test_method(rounds, ["dt"], inputs, **params)
     # test_method(rounds, ["rf"], inputs, **params)
+    # test_method(rounds, ["rf_reg"], inputs, **params)
+    # test_method(rounds, ["rf", "linear_svr", "par"], inputs, **params)
+    test_method(rounds, ["linear_svr", "par"], inputs, **params)
+    test_method(rounds, ["linear_svr"], inputs, **params)
+    test_method(rounds, ["rf_reg", "linear_svr", "par"], inputs, **params)
+    test_method(rounds, ["par"], inputs, **params)
+    # test_method(rounds, ["current"], inputs, **params)
     # test_method(rounds, ["average"], inputs, **params)
     # test_method(rounds, ["adaboost"], inputs, **params)
     # test_method(rounds, ["ridge"], inputs, **params)
@@ -267,8 +279,14 @@ def main():
     # test_method(rounds, ["theilsen"], inputs, parallel=False, **params)
     # test_method(rounds, ["ridge_reg"], inputs, **params)
     # test_method(rounds, ["ridge_reg", "linear_svr"], inputs, **params)
-    test_method(rounds, ["par", "linear_svr"], inputs, **params)
-    test_method(rounds, ["current"], inputs, **params)
+    # test_method(rounds, ["linear_svr", "knn"], inputs, **params)
+    # test_method(rounds, ["linear_svr", "par"], inputs, **params)
+    # test_method(rounds, ["linear_svr", "knn", "current"], inputs, **params)
+    # test_method(rounds, ["knn", "current"], inputs, **params)
+    # test_method(rounds, ["par", "current"], inputs, **params)
+    # test_method(rounds, ["par", "linear_svr"], inputs, **params)
+    # test_method(rounds, ["par", "linear_svr", "knn"], inputs, **params)
+    # test_method(rounds, ["par", "linear_svr", "knn", "current"], inputs, **params)
     # test_method(rounds, ["xgboost"], inputs, **params)
     # test_method(rounds, ["xgboost_reg"], inputs, **params)
     # test_method(rounds, ["ridge_reg", "linear", "theilson"], inputs, **params)
@@ -280,8 +298,14 @@ def main():
     # run(["ridge_reg"], inputs, False, **params)
     # run(["par"], inputs, False, **params)
     # run(["knn"], inputs, False, **params)
+    # run(["rf"], inputs, False, **params)
+    # run(["rf_reg"], inputs, False, **params)
     # run(["knn", "dt"], inputs, False, **params)
-    # run(["par", "linear_svr"], inputs, False, **params)
+    # run(["knn", "linear_svr"], inputs, False, **params)
+    # run(["rf", "linear_svr", "par"], inputs, False, **params)
+    # run(["linear_svr", "rf_reg"], inputs, False, **params)
+    run(["rf_reg", "linear_svr", "par"], inputs, False, **params)
+    # run(["current"], inputs, False, **params)
 
 
 if __name__ == '__main__':
