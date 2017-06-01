@@ -153,7 +153,6 @@ def run(method_list, inputs, cross_validate=True, fold=5, **kwargs):
         rst_sum, rst_count = 0, 0
         train_day_idx_partition = int(np.size(v_train, 2) / fold)
         day_idx = np.arange(0, np.size(v_train, 2))
-        # np.random.shuffle(day_idx)
         day_idx_test, day_idx_train = day_idx[-train_day_idx_partition:], day_idx[:-train_day_idx_partition]
         for tollgate_id in range(np.size(v_train, 0)):
             for direction in range(np.size(v_train, 1)):
