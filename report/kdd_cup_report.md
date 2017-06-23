@@ -61,3 +61,73 @@ travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.trav
 #### 
 
 ![lav_av](last_volume_to_volume.jpg)
+
+
+
+### 最初的KNN调参
+
+实现KNN算法后，我们对算法的主要参数进行了调参：
+
+- k：相邻的天数
+- num_bin：流量分桶的数目
+- feature_weight：每一个feature所占的比重（后来弃用）
+
+调参的方法为多轮交叉验证。
+
+通过对KNN的调参，并将KNN的结果与sklearn的决策树（DT）、随机森林（RF）交叉验证结果进行对比，我们发现在参数合适的前提下，KNN算法的效果比DT、RF都要好。此时提交KNN线上评测的MAPE为0.2947，排名为337名。
+
+（但是后来把DT的max_depth调成4之后，效果更好，MAPE=0.1916）
+
+
+
+### 初步尝试回归方法
+
+在run_paras.py的测试框架下，我们使用了sklearn中的多种回归模型进行交叉验证。初步测试的结果如下：
+
+| 回归模型                                    | 100轮交叉验证MAPE平均值 |
+| --------------------------------------- | --------------- |
+| linear_model.Ridge                      | 0.204806862849  |
+| linear_model.LinearRegression           | 0.204678557169  |
+| linear_model.TheilSenRegressor          | 0.208804268269  |
+| linear_model.HuberRegressor             | 0.2122051745    |
+| linear_model.PassiveAggressiveRegressor | 0.215107584956  |
+| linear_model.Lasso                      | 0.26701179869   |
+
+在线上评测中，Ridge、TheilSenRegressor、HuberRegressor的实际效果都较好，MAPE分别为0.1546、0.1474、0.1471，排名也提高了不少。
+
+在此基础上，我们还尝试将多个模型的预测结果取平均，以达到各模型的优势互补。测试结果如下：
+
+| 回归模型组合                                   | 100轮交叉验证MAPE平均值 |
+| ---------------------------------------- | --------------- |
+| Ridge + LinearRegression + TheilSenRegressor | 0.189860719072  |
+| PassiveAggressiveRegressor + Ridge + LinearRegression + TheilSenRegressor | 0.194190752111  |
+| LinearRegression + TheilSenRegressor     | 0.198352218302  |
+| HuberRegressor + LinearRegression + TheilSenRegressor | 0.201276413523  |
+| PassiveAggressiveRegressor + LinearRegression | 0.201466180066  |
+| HuberRegressor + Ridge + LinearRegression + TheilSenRegressor | 0.202914809818  |
+| Ridge + LinearRegression                 | 0.202993629813  |
+| HuberRegressor + TheilSenRegressor       | 0.208097269555  |
+| PassiveAggressiveRegressor + LinearRegression + Ridge | 0.209638011039  |
+| HuberRegressor + LinearRegression        | 0.209640871295  |
+| HuberRegressor + PassiveAggressiveRegressor + LinearRegression + TheilSenRegressor | 0.210467363855  |
+
+在第一阶段的线上评测中，上述组合的效果与单模型的效果相差不多，甚至更差；但在第二阶段的评测中，多模型组合的效果较好。
+
+（在最终提交中，我们采用了Ridge + svm.LinearSVR + PassiveAggressiveRegressor的回归模型组合。）
+
+
+
+### 数据清洗
+
+完成每10分钟的流量统计后，发现有不少流量为0的时间窗。我们经过分析，推测这可能是数据空缺造成的，因此尝试了不同的方法，填充流量为0 的数据。具体实现在extract_features.py中。
+
+1. 用当天的全天平均流量填充：对于每个(tollgate_id, direction_id)统计当前日期的平均流量，用于填充该(tollgate_id, direction_id)流量数据为0的时间窗。
+2. 用更细粒度的平均流量填充：考虑到每天不同时间段的流量差别较大，在方法1的基础上，将当天切分为0~6点、7~12点、13~18点、19~24点4个时间段，每个时间段分别统计各(tollgate_id, direction_id)的流量平均值，用于填充。
+3. 用Magic Number填充：通过观察数据分布，我们尝试了使用1、3、5等认为设定的“磨人流量”来填充流量为0的时间窗。
+4. 用前后两个时间窗口流量的平均值填充：考虑将每天的所有时间窗排成一个序列，在序列头、尾各添加一个流量为0的时间窗；对于原序列中流量为0的时间窗，考虑取其前后距离最近的两个不为零的时间窗流量的平均值作为填充（头、尾添加的时间窗视作“不为零”）。例如：原序列流量为{0, 0, 2, 0, 0, 8, 0}，则填充后变为{1, 1, 2, 5, 5, 8, 4}。这种做法可以使流量数据平滑化。
+
+经过本地交叉验证，发现方法1、4的测试结果最好。但在线上评测中，这两种方法的效果都不是很好，甚至差于不作填充时的提交结果。因此我们推断，这些流量为0的时间窗是正常的数据，而非之前猜想的空缺数据。
+
+对于这一点，可能的合理解释是：由于时间窗较短，高速路上某一路段10分钟内没有车流是可能存在的。同时，也有可能在那一流量为0的时间窗内有极少量的车通过而未被记录，这种情况下，保持流量为0的数据也是合理的做法。
+
+因此，在最终提交中，我们并未填充这些0数据。
