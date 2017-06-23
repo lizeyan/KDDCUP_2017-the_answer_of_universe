@@ -75,7 +75,7 @@ def extract_volume_naive(path_to_file, output_file, weather_data):
                         if weather_time - last_time_window > 3 * 60 * 60:
                             # if the time gap is larger than 3 hours
                             continue
-                        ps, sps, wd, ws, tp, rh, pp = weather_data[weather_idx, 1:]
+                        ps, sps, wd, ws, tp, rh, pp = weather_data[weather_idx, 1:][0]
                         print("%s %s %d %d %d %d %d %d %d %d %d %d" % (
                             tollgate_id, direction, each_tollgate_direction[last_time_window],
                             each_tollgate_direction[time_window], ps, sps, wd, ws, tp, rh, pp, time_window),

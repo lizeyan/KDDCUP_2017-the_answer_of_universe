@@ -52,7 +52,7 @@ def analyse_features_by_plotting(v, tt):
     sns.plt.savefig("./pic/time_to_average_travel_time.jpg")
     sns.boxplot(x="day", y="cat", data=tt)
     sns.plt.savefig("./pic/day_to_average_travel_time.jpg")
-    sns.jointplot(x="lat", y="cat", data=tt)
+    sns.boxplot(x="lat", y="cat", data=tt)
     sns.plt.savefig("./pic/last_travel_time_to_average_travel_time.jpg")
     sns.boxplot(x="tid", y="cat", data=tt)
     sns.plt.savefig("./pic/tid_to_average_travel_time.jpg")
@@ -86,11 +86,15 @@ def test_some_models(v, tt):
     def model_t(model): return use_a_model(model, "travel time", t_feature_train, t_label_train, t_feature_test, t_label_test)
 
     v_dt = model_v(tree.DecisionTreeClassifier())
-    t_dt = model_t(tree.DecisionTreeClassifier())
-    # require graphviz installed. use `sudo apt install graphviz` on Ubuntu or comment codes below
     dot_data = tree.export_graphviz(v_dt, out_file=None, max_depth=4, feature_names=["tid", "lav", "time", "day"])
     graph = pydotplus.graph_from_dot_data(dot_data)
-    graph.write_pdf("travel_time_decision_tree.pdf")
+    graph.write_png("volume_decision_tree.png")
+
+    t_dt = model_t(tree.DecisionTreeClassifier())
+    # require graphviz installed. use `sudo apt install graphviz` on Ubuntu or comment codes below
+    dot_data = tree.export_graphviz(t_dt, out_file=None, max_depth=4, feature_names=["tid", "iid", "lav", "lat", "time", "day"])
+    graph = pydotplus.graph_from_dot_data(dot_data)
+    graph.write_png("travel_time_decision_tree.png")
 
     model_v(ensemble.RandomForestClassifier(n_estimators=1000))
     model_t(ensemble.RandomForestClassifier(n_estimators=1000))
@@ -143,9 +147,9 @@ parser.add_argument("--volume_raw_data", default="volume.data", type=str)
 parser.add_argument("--travel_time_raw_data", default="travel_time.data", type=str)
 parser.add_argument("--weather_raw_data", default="weather.data", type=str)
 
-parser.add_argument("--volume_input", default="./training/volume(table 6)_training.csv", type=str)
-parser.add_argument("--travel_time_input", default="./training/trajectories(table 5)_training.csv", type=str)
-parser.add_argument("--weather_input", default="./training/weather (table 7)_training.csv", type=str)
+parser.add_argument("--volume_input", default="./train/volume(table 6)_training.csv", type=str)
+parser.add_argument("--travel_time_input", default="./train/trajectories(table 5)_training.csv", type=str)
+parser.add_argument("--weather_input", default="./train/weather (table 7)_training.csv", type=str)
 
 parser.add_argument("--method", default="naive", choices=["naive"], type=str)
 parser.add_argument("--fold", default=10, type=int)
