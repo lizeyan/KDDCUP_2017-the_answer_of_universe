@@ -85,11 +85,6 @@ def predict(train_list, train_result, test_list, method_list, **kwargs):
         rbm = neural_network.BernoulliRBM(n_components=512, verbose=False, n_iter=100, learning_rate=1e-2, random_state=0)
         rbm.fit(train_list)
         rbm.fit(test_list)
-        __predict_result = []
-        svr = svm.LinearSVR(C=kwargs["C"], epsilon=kwargs["epsilon"])
-        for idx in range(np.size(train_result, 1)):
-            svr.fit(rbm.transform(train_list), train_result[:, idx])
-            __predict_result.append(svr.predict(rbm.transform(test_list)))
         _predict_result.append(np.transpose(np.asarray(__predict_result)))
     elif "knn" in method_list:
         _ = knn_predict(train_list, _binned_train_result, test_list, k=kwargs["k"])
@@ -232,10 +227,10 @@ def main():
         "par_C": 1.0,
         "par_eps": 0.01,
     }
-    tw_seconds = 60 * 2
+    tw_seconds = 60 * 10
 
     v_train, v_test, all_ids, all_days, volume_bins = prepare_data(num_bin, time_window_seconds=tw_seconds,
-                                                                   refresh=False)
+                                                                   refresh=True)
 
     def from_bins_idx(arr):
         return np.vectorize(volume_bins.__getitem__)(arr)
