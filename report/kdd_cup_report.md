@@ -89,16 +89,32 @@ travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.trav
   不同收费站之间的差别是比较大的，因此不同收费站分别训练模型可能会比将收费站id作为一个参数会更好.
 
 
+## 新的模型
 
-## Volumn部分
+鉴于之前直接拟合曲线的效果不很好，我们参考课上其他组分享的方法，使用的新的建模思路：
 
-1、one-hot编码
+我们把训练数据中每一天给定的4小时的数据作为数据点，然后去训练待预测的4小时的数据。
+$$
+<\text{given average travel time(12 dims), weather features, day of week}>
+\\ \to
+\\ <\text{predicting average travel time}>
+$$
+
+$$
+<\text{given average volume(12 dims), weather features, day of week}>
+\\ \to
+\\ <\text{predicting average volume}>
+$$
+
+这样的话训练数据点的数目会变少，只和给出的数据的天数相当，但是这个模型的预测难度降低了。鉴于travel time问题的数据异常比较多，我们优先考虑volume问题。
+
+上面待预测的目标实际上是一个向量，我们的做法就是对向量的每一维分别去训练。同时，对于每个收费站，每个方向，每天的上下午（这是必须的，因为按照要求不能使用预测时间点之后的信息）也分别训练模型。
+
+### day of week的one-hot编码
 
 一开始的星期几表示我们使用数字表示（比如星期一对应0,星期二对应1），但在经过思考以及采取其他同学意见后，我们决定采用one-hot编码（比如星期一对应1000000，星期二对应0100000）。
 
-
-
-2、数据清洗
+### 数据预处理
 
 在KDD CUP进行到第二轮时，由于发现用于测试的那几天不包含国庆节，故我们将训练数据中10月1号到10月7号的数据全部删除，因为这几天的收费站流量明显高于其他天数，将这些特殊数据删掉更有利于最终的预测。在进行了数据清洗之后，本地测试的MAPE从0.18~0.19下降到0.16~0.17，效果大大提升。
 
@@ -107,7 +123,7 @@ travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.trav
 
 ![lav_av](last_volume_to_volume.jpg)
 
-
+## 学习算法的选择和优化
 
 ### 最初的KNN调参
 
@@ -122,8 +138,6 @@ travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.trav
 通过对KNN的调参，并将KNN的结果与sklearn的决策树（DT）、随机森林（RF）交叉验证结果进行对比，我们发现在参数合适的前提下，KNN算法的效果比DT、RF都要好。此时提交KNN线上评测的MAPE为0.2947，排名为337名。
 
 （但是后来把DT的max_depth调成4之后，效果更好，MAPE=0.1916）
-
-
 
 ### 初步尝试回归方法
 
@@ -160,9 +174,14 @@ travel_time_data = extract_travel_time_naive(FLAGS.travel_time_input, FLAGS.trav
 
 （在最终提交中，我们采用了Ridge + svm.LinearSVR + PassiveAggressiveRegressor的回归模型组合。）
 
+### 修改时间窗的大小
 
+要求的预测数据是每20分钟为一个时间窗，但是实际上使用更小的时间窗来预测，最后再把预测的结果加起来会更好。原因有两个：
 
-### 数据清洗
+1. 更小的时间窗流量的分布范围更小，更容易预测
+2. 将几个更小的时间窗的结果相加可以平均掉一些随机误差。
+
+## 数据清洗
 
 完成每10分钟的流量统计后，发现有不少流量为0的时间窗。我们经过分析，推测这可能是数据空缺造成的，因此尝试了不同的方法，填充流量为0 的数据。具体实现在extract_features.py中。
 
